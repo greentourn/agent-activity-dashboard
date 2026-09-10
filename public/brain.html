@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <title>NEURAL CORE — Agent Dashboard</title>
+    <link rel="stylesheet" href="/brain/hud.css" />
+
+    <!--
+      หน้านี้คือ UI ทางเลือกของ agent-dashboard (หน้าเดิมคือ /index.html ซึ่งเป็น SVG 2 มิติ)
+      กินข้อมูลจาก SSE ตัวเดียวกัน (/api/stream) แต่เรนเดอร์เป็นสมอง AI 3 มิติด้วย three.js
+
+      three.js ถูก vendor ไว้ที่ /vendor/ ตั้งใจไม่ใช้ CDN เพราะแดชบอร์ดตัวนี้เป็นเครื่องมือ
+      ที่ต้องเปิดได้ตอนเน็ตล่มหรือทำงานออฟไลน์ — ถ้าพึ่ง CDN วันที่เน็ตมีปัญหาคือวันที่
+      อยากดูแดชบอร์ดมากที่สุดพอดี
+      (three.module.min.js อ้าง ./three.core.min.js ต่อเอง จึงต้องอยู่โฟลเดอร์เดียวกัน)
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/vendor/three.module.min.js"
+        }
+      }
+    </script>
+
+    <style>
+      /* ─── ฐานของหน้า: ทุกอย่างที่ไม่ใช่ HUD (HUD อยู่ใน /brain/hud.css) ─── */
+      :root {
+        --void: #03060d;
+        --mono: "Cascadia Code", "Cascadia Mono", Consolas, "Courier New", monospace;
+        --sans: "Segoe UI", "Noto Sans Thai", system-ui, -apple-system, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--void);
+        color: #cfe8ff;
+        font-family: var(--sans);
+        overscroll-behavior: none;
+      }
+
+      #stage {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        touch-action: none;
+        cursor: grab;
+      }
+
+      #stage:active {
+        cursor: grabbing;
+      }
+
+      #hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none; /* คลิกทะลุไปหมุนฉากได้ ยกเว้นตัวควบคุมที่เปิด auto เอง */
+        z-index: 10;
+      }
+
+      /* ─── จอโหลด / จอ error ─── */
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(ellipse at center, #071426 0%, var(--void) 70%);
+        transition: opacity 0.6s ease;
+        font-family: var(--mono);
+      }
+
+      #boot.gone {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .boot-card {
+        text-align: center;
+        max-width: min(680px, 88vw);
+      }
+
+      .boot-title {
+        font-size: 13px;
+        letter-spacing: 0.42em;
+        color: #58d3ff;
+        text-transform: uppercase;
+        margin-bottom: 18px;
+        text-shadow: 0 0 18px rgba(88, 211, 255, 0.5);
+      }
+
+      .boot-ring {
+        width: 74px;
+        height: 74px;
+        margin: 0 auto 18px;
+        border-radius: 50%;
+        border: 1px solid rgba(88, 211, 255, 0.18);
+        border-top-color: #58d3ff;
+        border-right-color: rgba(163, 113, 247, 0.8);
+        animation: boot-spin 1.05s linear infinite;
+      }
+
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .boot-note {
+        font-size: 11px;
+        color: #6f8bab;
+        letter-spacing: 0.08em;
+      }
+
+      #boot.failed .boot-ring {
+        animation: none;
+        border-color: rgba(248, 81, 73, 0.65);
+      }
+
+      #boot.failed .boot-title {
+        color: #f85149;
+        text-shadow: none;
+      }
+
+      .boot-error {
+        display: none;
+        margin-top: 14px;
+        padding: 12px 14px;
+        text-align: left;
+        font-size: 11px;
+        line-height: 1.6;
+        color: #ffb4ae;
+        background: rgba(248, 81, 73, 0.08);
+        border: 1px solid rgba(248, 81, 73, 0.35);
+        border-radius: 6px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 42vh;
+        overflow: auto;
+      }
+
+      #boot.failed .boot-error {
+        display: block;
+      }
+
+      .boot-link {
+        display: inline-block;
+        margin-top: 14px;
+        font-size: 11px;
+        color: #79c0ff;
+        text-decoration: none;
+        border-bottom: 1px dashed rgba(121, 192, 255, 0.4);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .boot-ring {
+          animation-duration: 3s;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <canvas id="stage"></canvas>
+    <div id="hud"></div>
+
+    <div id="boot">
+      <div class="boot-card">
+        <div class="boot-ring"></div>
+        <div class="boot-title" id="boot-title">initialising neural core</div>
+        <div class="boot-note" id="boot-note">กำลังโหลด three.js และต่อสตรีม /api/stream …</div>
+        <pre class="boot-error" id="boot-error"></pre>
+        <a class="boot-link" href="/index.html">← กลับไปหน้าคลาสสิก</a>
+      </div>
+    </div>
+
+    <script>
+      /*
+       * ตัวจับความล้มเหลวของ ES module — ถ้า import พัง (พิมพ์พาธผิด / ไฟล์หาย / syntax error)
+       * เบราว์เซอร์จะไม่แสดงอะไรบนจอเลย เหลือแค่จอดำกับ error ใน console
+       * ซึ่งเป็นอาการที่ debug ยากที่สุด จึงดักไว้แล้วพ่นขึ้นจอตรงนี้
+       */
+      (function bootGuard() {
+        var boot = document.getElementById("boot");
+        var title = document.getElementById("boot-title");
+        var note = document.getElementById("boot-note");
+        var box = document.getElementById("boot-error");
+        var started = false;
+
+        function fail(message) {
+          boot.classList.remove("gone");
+          boot.classList.add("failed");
+          title.textContent = "neural core failed to start";
+          note.textContent = "เปิด DevTools › Console เพื่อดูรายละเอียดเต็ม";
+          box.textContent = String(message || "unknown error");
+        }
+
+        window.addEventListener("error", function (e) {
+          if (e && e.target && e.target.tagName === "SCRIPT") {
+            fail("โหลดสคริปต์ไม่สำเร็จ: " + (e.target.src || "?"));
+            return;
+          }
+          fail((e && e.message) || "error");
+        }, true);
+
+        window.addEventListener("unhandledrejection", function (e) {
+          fail("promise rejected: " + ((e && e.reason && (e.reason.stack || e.reason.message)) || e.reason));
+        });
+
+        /* main.js จะเรียกตัวนี้เมื่อเฟรมแรกวาดสำเร็จ */
+        window.__bootReady = function () {
+          if (started) return;
+          started = true;
+          boot.classList.add("gone");
+          setTimeout(function () {
+            if (boot.parentNode) boot.parentNode.removeChild(boot);
+          }, 800);
+        };
+
+        /* ถ้า 12 วินาทีแล้วยังไม่มีเฟรมแรก ให้บอกว่าน่าจะมีอะไรผิด แทนที่จะหมุนไปเรื่อย ๆ */
+        setTimeout(function () {
+          if (!started) {
+            note.textContent =
+              "ยังไม่มีเฟรมแรกหลัง 12 วินาที — ตรวจว่า /vendor/three.module.min.js และ /vendor/three.core.min.js มีอยู่จริง";
+          }
+        }, 12000);
+
+        if (!window.WebGL2RenderingContext) {
+          var probe = document.createElement("canvas");
+          if (!probe.getContext("webgl") && !probe.getContext("experimental-webgl")) {
+            fail("เบราว์เซอร์นี้เปิด WebGL ไม่ได้ — หน้านี้ต้องใช้ WebGL ลองเปิด hardware acceleration หรือใช้หน้าคลาสสิกแทน");
+          }
+        }
+      })();
+    </script>
+
+    <script type="module" src="/brain/main.js"></script>
+  </body>
+</html>

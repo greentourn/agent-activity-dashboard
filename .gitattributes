@@ -1,0 +1,14 @@
+# Normalise every text file to LF inside the repository, whatever the contributor's
+# platform does in their working copy. Without this, a Windows checkout with
+# core.autocrlf=true commits CRLF and every Linux/macOS clone shows a whole-file diff.
+* text=auto eol=lf
+
+# Never touch binaries.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary

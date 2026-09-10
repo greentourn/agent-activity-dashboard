@@ -1,0 +1,17 @@
+node_modules/
+npm-debug.log*
+*.log
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editors
+.vscode/
+.idea/
+*.swp
+
+# local scratch
+tmp/
+scratch/

@@ -1,0 +1,3977 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent Activity — ตอนนี้ agent ทำอะไรอยู่</title>
+    <!-- inline so the page makes zero outbound requests (and logs no favicon 404) -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23161b22'/%3E%3Crect x='7' y='10' width='18' height='14' rx='4' fill='%2358a6ff'/%3E%3Crect x='15' y='5' width='2' height='5' fill='%2358a6ff'/%3E%3Ccircle cx='16' cy='4' r='2.5' fill='%233fb950'/%3E%3Ccircle cx='12.5' cy='16' r='2' fill='%23eaf2ff'/%3E%3Ccircle cx='19.5' cy='16' r='2' fill='%23eaf2ff'/%3E%3Crect x='12' y='20' width='8' height='2' rx='1' fill='%23eaf2ff' opacity='.7'/%3E%3C/svg%3E"
+    />
+    <style>
+      :root {
+        --bg: #0d1117;
+        --bg-soft: #161b22;
+        --card: #171d26;
+        --card-2: #1d2430;
+        --line: #2a3341;
+        --line-soft: #212936;
+        --fg: #e6edf3;
+        --fg-dim: #9aa7b8;
+        --fg-faint: #6b7787;
+        --accent: #58a6ff;
+        --ok: #3fb950;
+        --warn: #d29922;
+        --bad: #f85149;
+        /* model palette — the ONE thing colour is spent on, so status must be shape (ring
+           weight, arcs) not hue. Checked for separability in both themes. */
+        --m-ha: #3fb950;
+        --m-op: #c07cff;
+        --m-so: #4a9eff;
+        --m-fa: #d29922;
+        --m-un: #7d8899;
+        --mono: ui-monospace, "Cascadia Code", "Consolas", monospace;
+        --sans: "Segoe UI", -apple-system, "Noto Sans Thai", system-ui, sans-serif;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f2f4f8;
+          --bg-soft: #e8ebf1;
+          --card: #ffffff;
+          --card-2: #f6f8fb;
+          --line: #d5dbe5;
+          --line-soft: #e4e9f0;
+          --fg: #1c2430;
+          --fg-dim: #55637a;
+          --fg-faint: #8b97a8;
+          --accent: #0969da;
+          --ok: #1a7f37;
+          --warn: #9a6700;
+          --bad: #cf222e;
+          --m-ha: #1a7f37;
+          --m-op: #8250df;
+          --m-so: #0969da;
+          --m-fa: #9a6700;
+          --m-un: #6e7781;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 14px/1.55 var(--sans);
+        -webkit-font-smoothing: antialiased;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          /* zeroing animation alone left node movement tweening — kill transitions too */
+          transition: none !important;
+        }
+      }
+
+      /* ---------- header: the at-a-glance layer. Deliberately unchanged. ---------- */
+      header {
+        flex: 0 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        align-items: center;
+        padding: 12px 18px;
+        background: var(--bg-soft);
+        border-bottom: 1px solid var(--line);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+        margin-right: auto;
+      }
+      .brand small {
+        display: block;
+        font-weight: 400;
+        font-size: 11.5px;
+        color: var(--fg-faint);
+        letter-spacing: 0;
+      }
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        padding: 5px 11px;
+        border-radius: 999px;
+        background: var(--card);
+        border: 1px solid var(--line-soft);
+        font-size: 12px;
+        color: var(--fg-dim);
+      }
+      .pill b {
+        font: 600 14px/1 var(--mono);
+        color: var(--fg);
+      }
+      .pill[data-tone="ok"] b {
+        color: var(--ok);
+      }
+      .pill[data-tone="warn"] b {
+        color: var(--warn);
+      }
+      .pill[data-tone="bad"] b {
+        color: var(--bad);
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .controls input[type="search"] {
+        width: 168px;
+        padding: 6px 10px;
+        border-radius: 9px;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--fg);
+        font: inherit;
+        font-size: 12.5px;
+      }
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--fg-dim);
+        cursor: pointer;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .conn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--fg-faint);
+      }
+      .conn i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--bad);
+      }
+      .conn.on i {
+        background: var(--ok);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
+      }
+
+      /* ---------- the fan-out state strip, above the graph ---------- */
+      .band {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 18px;
+        border-bottom: 1px solid var(--line-soft);
+        background: var(--bg);
+        font-size: 11.5px;
+        color: var(--fg-faint);
+      }
+
+      /* โควตาของแพลน — หน้าต่าง 5 ชม. (session) + รายสัปดาห์ */
+      .quota {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 18px;
+        padding: 7px 18px;
+        border-bottom: 1px solid var(--line-soft);
+        background: var(--bg);
+        font-size: 11.5px;
+        color: var(--fg-faint);
+      }
+      .quota .q {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .quota .q > b {
+        color: var(--fg-dim);
+        font-weight: 600;
+      }
+      .quota .meter {
+        width: 118px;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--line);
+        overflow: hidden;
+      }
+      .quota .meter > i {
+        display: block;
+        height: 100%;
+        min-width: 2px;
+        border-radius: 999px;
+        background: var(--ok);
+      }
+      .quota .meter[data-tone="warn"] > i {
+        background: var(--warn);
+      }
+      .quota .meter[data-tone="bad"] > i {
+        background: var(--bad);
+      }
+      .quota .stale {
+        color: var(--warn);
+      }
+      /* ป้ายบอก "เลขนี้มาจากไหน" — สด (ยิง API) vs cache (Claude Code เขียนไว้) */
+      .quota .src {
+        padding: 1px 6px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        font-size: 10px;
+        letter-spacing: 0.02em;
+        color: var(--fg-faint);
+      }
+      .quota .src[data-live="1"] {
+        border-color: var(--ok);
+        color: var(--ok);
+      }
+      /*
+       * ที่ว่างของมิเตอร์ตอนที่ยัง "ไม่รู้ %" — ต้องกว้างเท่ามิเตอร์จริง ไม่งั้นแถวจะกระตุกตอนตัวเลขมา
+       * และต้องไม่หน้าตาเหมือนมิเตอร์ 0% เพราะนั่นคือคำโกหกที่เรากำลังแก้อยู่พอดี
+       */
+      .quota .meter-unknown {
+        width: 118px;
+        height: 6px;
+        border-radius: 999px;
+        border: 1px dashed var(--line);
+        box-sizing: border-box;
+      }
+      .quota .unknown {
+        color: var(--warn);
+      }
+      /*
+       * มิเตอร์ "ประมาณ" — ใช้ตอนเลขทางการยังมาไม่ถึงแต่เรารู้ว่าหน้าต่างนี้เผาไปเท่าไร
+       * ต้องดูออกจาก**ระยะไกล**ว่าไม่ใช่ของจริง: ขอบประ + เนื้อโปร่ง + ตัวเลขมี `≈` นำหน้า
+       */
+      .quota .meter.est {
+        background: transparent;
+        border: 1px dashed var(--line);
+        box-sizing: border-box;
+      }
+      .quota .meter.est > i {
+        opacity: 0.45;
+      }
+      .quota .est-num {
+        color: var(--fg-dim);
+      }
+      /* แถวหน้าต่าง 5 ชม. ที่คำนวณสดจาก transcript — ข้อมูลคนละชั้นกับ % จึงแยกสายตาออกจากกัน */
+      .quota .win > b {
+        color: var(--fg-faint);
+        font-weight: 500;
+      }
+      .band .bar {
+        flex: 1;
+        display: flex;
+        gap: 2px;
+        height: 8px;
+        min-width: 80px;
+      }
+      .band .bar i {
+        flex: 1 1 0;
+        min-width: 2px;
+        border-radius: 2px;
+        background: var(--line);
+      }
+      .band .bar i[data-s="run"] {
+        background: var(--ok);
+      }
+      .band .bar i[data-s="err"] {
+        background: var(--bad);
+      }
+      .legend {
+        display: flex;
+        gap: 9px;
+        font: 10.5px/1 var(--mono);
+        white-space: nowrap;
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .legend i {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      #zoom-reset {
+        font: 11px/1 var(--sans);
+        padding: 5px 9px;
+        border-radius: 7px;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--fg-dim);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #zoom-reset:hover {
+        color: var(--fg);
+        border-color: var(--fg-faint);
+      }
+      #stage {
+        touch-action: none;
+      }
+
+      /* ---------- main split: graph stage + side panel ---------- */
+      main {
+        flex: 1 1 auto;
+        display: grid;
+        grid-template-columns: 1fr 0;
+        min-height: 0;
+        transition: grid-template-columns 0.18s;
+      }
+      main.panel-open {
+        grid-template-columns: 1fr minmax(340px, 30%);
+      }
+      #stage {
+        position: relative;
+        min-width: 0;
+        overflow: hidden;
+        background: var(--bg);
+      }
+      #graph {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .stage-empty {
+        position: absolute;
+        inset: 0;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        color: var(--fg-faint);
+        text-align: center;
+        pointer-events: none;
+      }
+      .stage-empty b {
+        color: var(--fg-dim);
+        font-size: 15px;
+      }
+      #stage.is-empty .stage-empty {
+        display: flex;
+      }
+
+      /* ---------- graph pieces ---------- */
+      .edge {
+        stroke: var(--line);
+        fill: none;
+      }
+      .edge.run {
+        stroke: color-mix(in srgb, var(--ok) 55%, var(--line));
+      }
+      .wfarc {
+        fill: none;
+        stroke: color-mix(in srgb, var(--accent) 30%, transparent);
+        stroke-linecap: round;
+      }
+      .node {
+        cursor: pointer;
+      }
+      /* The simulation owns positions, so a node must NOT also CSS-transition its transform —
+         that fights the physics and smears every frame. Motion comes from the sim; only the
+         spawn-in and the dim/undim are CSS. */
+      .node.spawn .disc,
+      .node.spawn .ring {
+        animation: grow 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
+      }
+      /* On the way home: shrink, fade, and drop the label so it does not smear across the graph.
+         Durations track the measured flight time: the path is K.home frames long but the arrival
+         test fires once the node is inside the parent's disc, which measured 0.6s in — so the
+         disc is at its smallest exactly as it lands, not already invisible halfway there. */
+      .node.dying {
+        opacity: 0.3;
+        transition: opacity 0.6s ease-in;
+      }
+      .node.dying .disc,
+      .node.dying .ring {
+        transform: scale(0.35);
+        transition: transform 0.6s cubic-bezier(0.5, 0, 0.75, 0);
+      }
+      .node.dying .pulsering {
+        display: none;
+      }
+
+      /* the parent's ripple when it spawns a child */
+      .hub .birth {
+        fill: none;
+        stroke: var(--ok);
+        opacity: 0;
+      }
+      .hub .birth.go {
+        animation: ripple 0.7s ease-out;
+      }
+      @keyframes ripple {
+        0% {
+          opacity: 0.75;
+          transform: scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(2.2);
+        }
+      }
+      @keyframes grow {
+        from {
+          transform: scale(0.1);
+          opacity: 0;
+        }
+      }
+      .node .disc {
+        stroke: var(--bg);
+      }
+      .node .ring {
+        fill: none;
+      }
+      .node.run .ring {
+        stroke: var(--ok);
+      }
+      .node.done .ring {
+        stroke: var(--line);
+      }
+      .node .errarc {
+        fill: none;
+        stroke: var(--bad);
+        stroke-linecap: round;
+      }
+      .node .mono {
+        font: 600 9px var(--mono);
+        fill: #fff;
+        text-anchor: middle;
+        dominant-baseline: central;
+        pointer-events: none;
+        letter-spacing: 0.02em;
+      }
+      .capg {
+        pointer-events: none;
+      }
+      .capg .cap {
+        font: 10px var(--sans);
+        fill: var(--fg-dim);
+        stroke: var(--bg);
+        stroke-width: 3;
+        paint-order: stroke;
+        stroke-linejoin: round;
+      }
+      .node.sel .disc {
+        stroke: var(--fg);
+        stroke-width: 2;
+      }
+      .node.dim {
+        opacity: 0.18;
+        transition: opacity 0.18s;
+      }
+      .node.run .pulsering {
+        fill: none;
+        stroke: var(--ok);
+        animation: ping 1.6s ease-out infinite;
+      }
+      @keyframes ping {
+        0% {
+          opacity: 0.55;
+          transform: scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(1.9);
+        }
+      }
+      /* paint-order:stroke puts a background-coloured halo UNDER the glyphs, so hub text stays
+         readable even where a spoke passes behind it */
+      .hub text {
+        stroke: var(--bg);
+        stroke-width: 3.5;
+        paint-order: stroke;
+        stroke-linejoin: round;
+      }
+      .hub .hubname {
+        font: 600 13.5px var(--sans);
+        fill: var(--fg);
+        text-anchor: middle;
+      }
+      .hub .hubsub {
+        font: 10px var(--mono);
+        fill: var(--fg-faint);
+        text-anchor: middle;
+      }
+      .hub .hubdoing {
+        font: 10.5px var(--mono);
+        fill: var(--fg-dim);
+        text-anchor: middle;
+      }
+      .hub .surface {
+        font: 600 8.5px var(--sans);
+        text-anchor: middle;
+        letter-spacing: 0.06em;
+      }
+      .hub .errcount {
+        font: 600 10px var(--mono);
+        fill: var(--bad);
+        text-anchor: start;
+      }
+      .more {
+        cursor: pointer;
+      }
+      .more text {
+        font: 600 10px var(--mono);
+        fill: var(--fg-dim);
+        text-anchor: middle;
+        dominant-baseline: central;
+      }
+      .more circle {
+        fill: var(--card-2);
+        stroke: var(--line);
+      }
+
+      /* ---------- side panel ---------- */
+      #panel {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid var(--line);
+        background: var(--card);
+        overflow: hidden;
+      }
+      main:not(.panel-open) #panel {
+        display: none;
+      }
+      .p-head {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .p-head b {
+        font-weight: 640;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .p-head .x {
+        margin-left: auto;
+        cursor: pointer;
+        color: var(--fg-faint);
+        font-size: 16px;
+        line-height: 1;
+        padding: 0 4px;
+      }
+      .p-head .x:hover {
+        color: var(--fg);
+      }
+      .p-tabs {
+        flex: 0 0 auto;
+        display: flex;
+        gap: 5px;
+        padding: 8px 12px 0;
+      }
+      .p-tabs button {
+        font: 11.5px/1 var(--sans);
+        padding: 6px 10px;
+        border-radius: 7px;
+        border: 1px solid var(--line);
+        background: var(--card-2);
+        color: var(--fg-dim);
+        cursor: pointer;
+      }
+      .p-tabs button[aria-pressed="true"] {
+        background: color-mix(in srgb, var(--accent) 18%, var(--card));
+        border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+        color: var(--fg);
+      }
+      .p-body {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 10px 12px 16px;
+        scrollbar-width: thin;
+      }
+      .p-body::-webkit-scrollbar,
+      .kv pre::-webkit-scrollbar {
+        width: 8px;
+      }
+      .p-body::-webkit-scrollbar-thumb,
+      .kv pre::-webkit-scrollbar-thumb {
+        background: var(--line);
+        border-radius: 4px;
+      }
+      .p-note {
+        font-size: 11.5px;
+        color: var(--fg-faint);
+        padding: 4px 0 8px;
+      }
+
+      /* session meta grid */
+      .meta {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 3px 10px;
+        font: 11.5px/1.5 var(--mono);
+        margin-bottom: 10px;
+      }
+      .meta dt {
+        color: var(--fg-faint);
+      }
+      .meta dd {
+        margin: 0;
+        color: var(--fg);
+        overflow-wrap: anywhere;
+      }
+      .tag {
+        font: 600 9.5px/1 var(--sans);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 3px 6px;
+        border-radius: 5px;
+        background: var(--card-2);
+        border: 1px solid var(--line-soft);
+        color: var(--fg-dim);
+        white-space: nowrap;
+      }
+      .tag[data-surface="claude-vscode"] {
+        color: #4a9eff;
+        border-color: #4a9eff55;
+        background: #4a9eff1a;
+      }
+      .tag[data-surface="claude-desktop"] {
+        color: #c07cff;
+        border-color: #c07cff55;
+        background: #c07cff1a;
+      }
+      .tag[data-surface="cli"],
+      .tag[data-surface="claude-cli"] {
+        color: #3fb950;
+        border-color: #3fb95055;
+        background: #3fb9501a;
+      }
+
+      /* ---------- feed (chat bubbles) — moved into the panel ---------- */
+      .feed {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .ev {
+        flex: 0 0 auto;
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .ev.fresh {
+        animation: pop 0.18s ease-out;
+      }
+      @keyframes pop {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+      }
+      .ev .av {
+        flex: 0 0 20px;
+        font-size: 14px;
+        line-height: 1.3;
+        text-align: center;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .bubble {
+        max-width: 88%;
+        padding: 7px 11px;
+        border-radius: 13px;
+        background: var(--card-2);
+        border: 1px solid var(--line-soft);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 13px;
+      }
+      .ev.prompt {
+        flex-direction: row-reverse;
+      }
+      .ev.prompt .bubble {
+        background: color-mix(in srgb, var(--accent) 16%, var(--card-2));
+        border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+        border-bottom-right-radius: 4px;
+      }
+      .ev.say .bubble {
+        border-bottom-left-radius: 4px;
+      }
+      .ev.thinking .bubble {
+        background: transparent;
+        border-style: dashed;
+        color: var(--fg-faint);
+        font-style: italic;
+        font-size: 12px;
+      }
+      .ev.tool {
+        gap: 7px;
+        padding-left: 26px;
+      }
+      .chip {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 9px;
+        border-radius: 8px;
+        background: var(--card-2);
+        border: 1px solid var(--line-soft);
+        border-left: 2px solid var(--fg-faint);
+      }
+      .chip .t {
+        font: 600 11px/1.3 var(--mono);
+        color: var(--fg);
+        flex: 0 0 auto;
+      }
+      .chip .l {
+        font: 11.5px/1.4 var(--mono);
+        color: var(--fg-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+        min-width: 0;
+      }
+      .chip .d {
+        font: 11px/1 var(--mono);
+        color: var(--fg-faint);
+        flex: 0 0 auto;
+        font-variant-numeric: tabular-nums;
+      }
+      .chip.run {
+        border-left-color: var(--ok);
+      }
+      .chip.fail {
+        border-left-color: var(--bad);
+        background: color-mix(in srgb, var(--bad) 10%, var(--card-2));
+      }
+      .ev.error .bubble {
+        font: 11.5px/1.5 var(--mono);
+        background: color-mix(in srgb, var(--bad) 12%, var(--card-2));
+        border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+        color: var(--fg-dim);
+      }
+      .ev.guard .bubble,
+      .ev.denied .bubble,
+      .ev.blocked .bubble {
+        font-size: 12px;
+        background: color-mix(in srgb, var(--warn) 14%, var(--card-2));
+        border-color: color-mix(in srgb, var(--warn) 42%, transparent);
+        color: var(--fg-dim);
+      }
+
+      /* ---------- drill-down rows (tool / error / deny) ---------- */
+      .trow {
+        border: 1px solid var(--line-soft);
+        border-left: 2px solid var(--fg-faint);
+        border-radius: 6px;
+        background: var(--card-2);
+        margin-bottom: 5px;
+        overflow: hidden;
+      }
+      .trow.fail {
+        border-left-color: var(--bad);
+      }
+      .trow.deny {
+        border-left-color: var(--warn);
+      }
+      .trow.run {
+        border-left-color: var(--ok);
+      }
+      .trow-line {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 8px;
+        cursor: pointer;
+        min-width: 0;
+      }
+      .trow-line .t {
+        font: 600 11px/1.3 var(--mono);
+        flex: 0 0 auto;
+      }
+      .trow-line .l {
+        flex: 1;
+        min-width: 0;
+        font: 11.5px/1.4 var(--mono);
+        color: var(--fg-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .trow-line .d {
+        flex: 0 0 auto;
+        font: 10.5px/1 var(--mono);
+        color: var(--fg-faint);
+        font-variant-numeric: tabular-nums;
+      }
+      .badge {
+        flex: 0 0 auto;
+        font: 600 9.5px/1 var(--sans);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        padding: 3px 5px;
+        border-radius: 4px;
+        white-space: nowrap;
+      }
+      .badge.bad {
+        color: var(--bad);
+        background: color-mix(in srgb, var(--bad) 14%, transparent);
+        border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent);
+      }
+      .badge.warn {
+        color: var(--warn);
+        background: color-mix(in srgb, var(--warn) 14%, transparent);
+        border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+      }
+      .badge.calm {
+        color: var(--fg-faint);
+        background: var(--card-2);
+        border: 1px solid var(--line-soft);
+      }
+      .trow-body {
+        display: none;
+        padding: 2px 8px 8px;
+        border-top: 1px dashed var(--line-soft);
+      }
+      .trow.open .trow-body {
+        display: block;
+      }
+      .kv {
+        margin-top: 6px;
+      }
+      .kv .k {
+        font: 600 10px/1.4 var(--mono);
+        color: var(--fg-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .kv .sz {
+        font: 10px/1 var(--mono);
+        color: var(--fg-faint);
+        margin-left: 5px;
+      }
+      .kv pre {
+        margin: 2px 0 0;
+        padding: 6px 8px;
+        max-height: 260px;
+        overflow: auto;
+        border-radius: 5px;
+        background: var(--bg-soft);
+        border: 1px solid var(--line-soft);
+        font: 11px/1.5 var(--mono);
+        color: var(--fg);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        scrollbar-width: thin;
+      }
+      .kv pre.blob {
+        color: var(--fg-dim);
+      }
+      .kv pre.err {
+        background: color-mix(in srgb, var(--bad) 9%, var(--bg-soft));
+        border-color: color-mix(in srgb, var(--bad) 35%, transparent);
+      }
+      .kv pre.deny {
+        background: color-mix(in srgb, var(--warn) 10%, var(--bg-soft));
+        border-color: color-mix(in srgb, var(--warn) 38%, transparent);
+      }
+      .patch {
+        font: 11px/1.5 var(--mono);
+      }
+      .patch .add {
+        color: var(--ok);
+      }
+      .patch .del {
+        color: var(--bad);
+      }
+      .patch .hdr {
+        color: var(--fg-faint);
+      }
+
+      /* finished sub-agents list inside the panel */
+      /* แถวในแท็บ "error กิน token" */
+      .wrow {
+        border: 1px solid var(--line-soft);
+        background: var(--card-2);
+        border-radius: 6px;
+        padding: 7px 9px;
+        margin-bottom: 5px;
+        cursor: pointer;
+      }
+      .wrow > .top {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .wrow .amt {
+        font-weight: 700;
+        color: var(--bad);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .wrow .cnt {
+        color: var(--fg-faint);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .wrow .lbl {
+        color: var(--fg);
+        flex: 1;
+        min-width: 0;
+      }
+      .wrow .share {
+        height: 4px;
+        border-radius: 999px;
+        background: var(--line);
+        margin: 6px 0 5px;
+        overflow: hidden;
+      }
+      .wrow .share > i {
+        display: block;
+        height: 100%;
+        min-width: 2px;
+        border-radius: 999px;
+        background: var(--bad);
+      }
+      .wrow .fix {
+        font-size: 11px;
+        color: var(--warn);
+        line-height: 1.45;
+      }
+      /* ข้อความ error จริง + คำสั่งที่สั่ง — ต้องอ่านได้ทั้งบรรทัดยาว จึงให้เลื่อนในตัวเอง */
+      .etext {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        max-height: 190px;
+        overflow: auto;
+        margin-top: 5px;
+        padding: 6px 8px;
+        border-radius: 5px;
+        background: var(--bg);
+        border: 1px solid var(--line-soft);
+        color: var(--fg-dim);
+      }
+      .etext.cmd {
+        color: var(--fg-faint);
+        max-height: 90px;
+      }
+      .p-back {
+        appearance: none;
+        cursor: pointer;
+        margin-bottom: 7px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line-soft);
+        background: var(--card);
+        color: var(--fg-dim);
+        font: inherit;
+        font-size: 11.5px;
+      }
+      .p-back:hover {
+        color: var(--fg);
+        border-color: var(--line);
+      }
+
+      .srow {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 7px;
+        border-radius: 6px;
+        border: 1px solid var(--line-soft);
+        background: var(--card-2);
+        margin-bottom: 4px;
+        cursor: pointer;
+        min-width: 0;
+      }
+      .srow:hover {
+        border-color: var(--line);
+      }
+      .srow .mdot {
+        flex: 0 0 auto;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+      }
+      /* ขีดต่อของแถวลูกในลิสต์ต้นไม้ */
+      .srow .tw {
+        flex: 0 0 auto;
+        color: #556;
+        font-size: 11px;
+        line-height: 1;
+        opacity: 0.75;
+      }
+      .srow .ty {
+        flex: 0 0 auto;
+        font: 600 9.5px/1 var(--sans);
+        color: var(--accent);
+      }
+      .srow .l {
+        flex: 1;
+        min-width: 0;
+        font: 11.5px/1.4 var(--mono);
+        color: var(--fg-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .srow .d {
+        flex: 0 0 auto;
+        font: 10.5px/1 var(--mono);
+        color: var(--fg-faint);
+      }
+      .srow .e {
+        flex: 0 0 auto;
+        font: 600 10px/1 var(--mono);
+        color: var(--bad);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        🕸️
+        <span
+          >Agent Activity
+          <small>ทุก surface — CLI · VS Code extension · desktop · background</small></span
+        >
+      </div>
+      <div class="pills" id="pills"></div>
+      <div class="controls">
+        <input id="filter" type="search" placeholder="กรอง ชื่อ/โปรเจกต์…" />
+        <label class="toggle"><input type="checkbox" id="beep" /> เตือนเมื่อรอเรา</label>
+        <span class="conn" id="conn"><i></i> <span>ต่อ…</span></span>
+      </div>
+    </header>
+
+    <!--
+      โควตาของแพลน (session 5 ชม. + รายสัปดาห์) — 3 ชั้น ดู renderQuota:
+        1. หน้าต่าง 5 ชม. ที่เดินอยู่จริง คำนวณสดจาก transcript (ไม่ใช้ credential ไม่ยิงเน็ต)
+        2. % อย่างเป็นทางการ — สดจาก /api/oauth/usage เมื่อรันด้วย `--live-usage`, ไม่งั้นมาจาก
+           cache `~/.claude.json` → `cachedUsageUtilization`
+        3. นาฬิกานับถอยหลังที่เดินทุกเฟรม
+      ⚠️ ห้ามวาดมิเตอร์เมื่อ `sessionKnown` เป็น false — นั่นแปลว่า % ที่มีเป็นของหน้าต่างที่จบไปแล้ว
+    -->
+    <div class="quota" id="quota" hidden></div>
+
+    <div class="band">
+      <span id="band-label">fan-out</span>
+      <div class="bar" id="band-bar"></div>
+      <div class="legend" id="legend"></div>
+      <button type="button" id="zoom-reset" title="กลับมุมมองเริ่มต้น และปลดหมุด node ที่ลากไว้">รีเซ็ตมุมมอง</button>
+    </div>
+
+    <main id="main">
+      <div id="stage">
+        <svg id="graph" role="tree" aria-label="กราฟ agent ที่กำลังทำงาน"></svg>
+        <div class="stage-empty">
+          <b>ยังไม่มี agent ทำงานอยู่</b>
+          <span>เปิด Claude Code ที่ไหนก็ได้ แล้วมันจะโผล่ที่นี่เอง</span>
+          <span style="font-size: 11px">ลาก node ได้ · ล้อเมาส์ = ซูม · ลากพื้นหลัง = เลื่อน</span>
+          <span style="font-size: 11px">ทดสอบความหนาแน่นได้ด้วย ?fixture=45</span>
+        </div>
+      </div>
+      <aside id="panel">
+        <div class="p-head">
+          <b id="p-title">—</b>
+          <span class="badge calm" id="p-meta"></span>
+          <span class="x" id="p-close" title="ปิด">✕</span>
+        </div>
+        <div class="p-tabs" id="p-tabs"></div>
+        <div class="p-body" id="p-body"></div>
+      </aside>
+    </main>
+
+    <script>
+      "use strict";
+
+      // =====================================================================
+      // constants
+      // =====================================================================
+
+      const STATE_TH = {
+        tool: "กำลังใช้เครื่องมือ",
+        thinking: "กำลังคิด",
+        waiting: "รอเราตอบ / รออนุญาต",
+        blocked: "ติดด่าน / มี error",
+        quiet: "กำลังคิด",
+        idle: "ว่าง รอคำสั่ง",
+        unknown: "ไม่มี transcript",
+      };
+      const STATE_ICON = {
+        tool: "⚙️",
+        thinking: "💭",
+        waiting: "🙋",
+        blocked: "⛔",
+        quiet: "💭",
+        idle: "😴",
+        unknown: "❔",
+      };
+      const EV_AVATAR = {
+        prompt: "👤",
+        say: "🤖",
+        thinking: "💭",
+        error: "❌",
+        guard: "🔒",
+        denied: "🚫",
+        blocked: "⛔",
+      };
+      const MODEL_VAR = { ha: "--m-ha", op: "--m-op", so: "--m-so", fa: "--m-fa" };
+
+      /*
+       * Layout is CLOSED-FORM, not simulated.
+       *
+       * The graph is a depth-1 star: session hubs, each with sub-agent children, and nothing
+       * deeper (spawnDepth is 1 in 545/545 sidecars on this machine and no parentAgentId field
+       * exists, so a deeper edge would be a lie). A star has an exact layout — angle from a stable
+       * sort index, radius from degree — which means no drift, no freeze criterion, no CPU burn,
+       * and no explosion guards. A force simulation was designed and measured for this and then
+       * deliberately dropped: it spent all its complexity taming problems that only exist because
+       * it was there. Positions here are a pure function of (session order, child sort order).
+       */
+      const HUB_R = 40;
+      const NODE_MIN = 9;
+      const NODE_MAX = 20;
+      const RING_MIN = 108;
+      const RING_MAX = 460;
+      /** Arc length reserved per child on a ring: node diameter + breathing room. */
+      const ARC_PER_CHILD = 46;
+      /** Radius step when a ring overflows into a second shell. */
+      const SHELL_STEP = 52;
+      /** Children drawn per hub; the rest collapse into a "+N" node that opens the panel list. */
+      const MAX_DRAWN = 64;
+      const PAD = 26;
+
+      // =====================================================================
+      // helpers
+      // =====================================================================
+
+      const $ = (sel) => document.querySelector(sel);
+
+      function el(tag, cls, text) {
+        const n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text != null) n.textContent = text;
+        return n;
+      }
+      function svg(tag, attrs) {
+        const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+        if (attrs) for (const k of Object.keys(attrs)) n.setAttribute(k, attrs[k]);
+        return n;
+      }
+      /*
+       * สถานะของ sub-agent 1 ตัวเป็นข้อความ — แยก "ล้มเหลว" ออกจาก "จบแล้ว"
+       *
+       * `outcome` มาจากฝั่ง server: terminal type ที่ workflow journal เขียนเอง (`result` ⇒ "ok",
+       * `failed` ⇒ "failed") · "unknown" = ไม่มีใครยืนยัน แค่เงียบไปจนหมดเวลา ซึ่งไม่เท่ากับสำเร็จ
+       * และไม่เท่ากับล้มเหลว จึงต้องพูดตามนั้น ไม่เดาให้เป็นข้างใดข้างหนึ่ง
+       */
+      function subStateTh(s) {
+        if (s.running) return "กำลังทำงาน";
+        if (s.outcome && s.outcome !== "ok" && s.outcome !== "unknown") return "⛔ ล้มเหลว (" + s.outcome + ")";
+        if (s.outcome === "unknown") return "จบแล้ว (เดาจากความเงียบ)";
+        return "จบแล้ว";
+      }
+
+      /*
+       * โทเค็น — รวมทุกชั้นที่คิดเงิน แล้วย่อให้อ่านได้ในป้ายเล็ก ๆ
+       *
+       * ทั้ง 4 ชั้นถูกบวกรวมกันเพราะทุกชั้น "ถูกส่งไปจริง" แต่ **ราคาไม่เท่ากัน** (cacheRead คิดที่ 10%
+       * ของ input) ⇒ ตัวเลขรวมบอก "ปริมาณที่ไหลผ่าน" ไม่ใช่ราคา · สัดส่วน cacheRead จึงถูกแยกแสดง
+       * ในแผงต่างหาก เพราะมันคือตัวที่อธิบายว่าทำไม session ที่บวมแล้วทุก tool call ถึงแพงขึ้น
+       * (วัดจากเครื่องนี้: 97.8% ของทุกโทเค็นเป็น cacheRead)
+       */
+      function tokTotal(t) {
+        if (!t) return 0;
+        return (t.input || 0) + (t.cacheCreate || 0) + (t.cacheRead || 0) + (t.output || 0);
+      }
+
+      function fmtTok(n) {
+        if (!n) return "0";
+        if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+        if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M";
+        if (n >= 1e3) return (n / 1e3).toFixed(0) + "K";
+        return String(n);
+      }
+
+      /**
+       * บล็อกสรุปโทเค็นสำหรับ tooltip — คืนสตริงว่างถ้าไม่มีข้อมูล (จะไม่เกิดบรรทัดเปล่า)
+       * แยก cache read ออกมาเป็น % เพราะมันคือตัวเดียวที่ตอบว่า "ทำไม session นี้แพง"
+       */
+      function tokTip(label, t) {
+        const total = tokTotal(t);
+        if (!total) return "";
+        const share = Math.round(((t.cacheRead || 0) / total) * 100);
+        return (
+          `\n${label}: ${fmtTok(total)} จาก ${t.requests || 0} request` +
+          `\n   cache read ${fmtTok(t.cacheRead || 0)} (${share}%) · cache write ${fmtTok(t.cacheCreate || 0)}` +
+          `\n   input ${fmtTok(t.input || 0)} · output ${fmtTok(t.output || 0)}` +
+          (t.thinking ? ` (คิด ${fmtTok(t.thinking)})` : "") +
+          (t.errorRecovery ? `\n   เสียไปกับการแก้ error ${fmtTok(t.errorRecovery)}` : "") +
+          (t.partial ? "\n   ⚠️ ยอดไม่ครบ — อ่านไฟล์ทั้งไฟล์ไม่ได้" : "")
+        );
+      }
+
+      /**
+       * แถวโทเค็นสำหรับแผงรายละเอียด — คืน `[]` ถ้าไม่มีข้อมูล จึง spread เข้าไปในลิสต์แถวได้เลย
+       * แยก 4 ชั้นออกจากกันเพราะราคาต่อโทเค็นไม่เท่ากัน และ cache read คือชั้นที่อธิบายบิลได้
+       */
+      function tokRows(t, label) {
+        const total = tokTotal(t);
+        if (!total) return [];
+        const head = label || "โทเค็น";
+        const share = Math.round(((t.cacheRead || 0) / total) * 100);
+        const rows = [
+          [head, `${fmtTok(total)} · ${t.requests || 0} request` + (t.partial ? " · ⚠️ ยอดไม่ครบ" : "")],
+          [head + " — cache read", `${fmtTok(t.cacheRead || 0)} (${share}%)`],
+          [head + " — cache write", fmtTok(t.cacheCreate || 0)],
+          [
+            head + " — input / output",
+            `${fmtTok(t.input || 0)} / ${fmtTok(t.output || 0)}` + (t.thinking ? ` (คิด ${fmtTok(t.thinking)})` : ""),
+          ],
+        ];
+        if (t.errorRecovery) {
+          rows.push([
+            head + " — เสียไปกับ error",
+            `${fmtTok(t.errorRecovery)} (${Math.round((t.errorRecovery / total) * 100)}% — request ที่ต้องใช้ไปอ่าน error แล้วสั่งใหม่)`,
+          ]);
+        }
+        return rows;
+      }
+
+      function fmtDur(ms) {
+        if (ms == null || !isFinite(ms) || ms < 0) return "";
+        if (ms < 1000) return ms + "ms";
+        if (ms < 60000) return (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + "s";
+        const m = Math.floor(ms / 60000);
+        const s = Math.round((ms % 60000) / 1000);
+        if (m < 60) return m + "m " + String(s).padStart(2, "0") + "s";
+        return Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m";
+      }
+      function fmtAgo(ts, now) {
+        if (!ts) return "—";
+        const ms = now - Date.parse(ts);
+        if (!isFinite(ms)) return "—";
+        if (ms < 5000) return "เมื่อกี้";
+        return fmtDur(ms) + " ที่แล้ว";
+      }
+      function shortCwd(p) {
+        if (!p) return "";
+        const parts = p.split(/[\\/]/).filter(Boolean);
+        return parts.length <= 2 ? p : "…/" + parts.slice(-2).join("/");
+      }
+      function trunc(s, n) {
+        const t = String(s || "").replace(/\s+/g, " ").trim();
+        return t.length > n ? t.slice(0, n - 1) + "…" : t;
+      }
+      function modelColor(tag) {
+        const key = String(tag || "").toLowerCase().slice(0, 2);
+        return `var(${MODEL_VAR[key] || "--m-un"})`;
+      }
+
+      // =====================================================================
+      // state
+      // =====================================================================
+
+      let snapshot = { agents: [], totals: {}, nowMs: 0 };
+      let filterText = "";
+      /** sessionId -> column index. NEVER derived from array position: the server re-sorts agents
+       *  by busyness every tick, and hubs that swap columns make the picture jump. */
+      const hubColumn = new Map();
+      /** node key -> { g, refs, x, y } — the only place positions live. */
+      const nodes = new Map();
+      const edges = new Map();
+      const wfArcs = new Map();
+      const wasWaiting = new Set();
+      let selected = null; // { kind:'hub'|'sub', sessionId, agentId }
+      let panelTab = "feed";
+      let feedSeq = 0;
+      let feedStick = true;
+
+      // =====================================================================
+      // header: pills, band, legend  (the at-a-glance layer — unchanged on purpose)
+      // =====================================================================
+
+      function renderPills(t) {
+        const rows = [
+          ["ทำงานอยู่", t.live ?? 0, "ok"],
+          ["ยุ่ง", t.busy ?? 0, ""],
+          ["รอเรา", t.waiting ?? 0, t.waiting ? "warn" : ""],
+          ["sub-agent วิ่ง", t.subsRunning ?? 0, t.subsRunning ? "ok" : ""],
+          // "tool" was the LIFETIME count and it read 1049 — a number about the past sitting in
+          // the row that is supposed to say what is happening now. The header now counts tools
+          // IN FLIGHT; the full history is still one click away in the panel's tool tab.
+          ["tool กำลังรัน", t.toolsRunning ?? 0, t.toolsRunning ? "ok" : ""],
+          ["error", t.errors ?? 0, t.errors ? "bad" : ""],
+          ["ถูก deny", t.denials ?? 0, t.denials ? "warn" : ""],
+        ];
+        /*
+         * โทเค็นเป็น**ยอดสะสมโดยเจตนา** ต่างจาก "tool กำลังรัน" ข้างบน — โทเค็นที่จ่ายแล้วจ่ายแล้ว
+         * ยอดตลอดชีวิตจึงเป็นตัวเลขเดียวที่ซื่อสัตย์ และมันคือสิ่งที่ทำให้ต้นทุนของ session ยาว ๆ
+         * มองเห็นได้ *ตอนที่ยังทำอะไรได้* ไม่ใช่ตอนไปนับ transcript ย้อนหลัง
+         */
+        if (t.tokens) rows.push(["token", fmtTok(tokTotal(t.tokens)), ""]);
+        // แยก pill ของ "โทเค็นที่เสียไปกับการแก้ error" ออกมา เพราะมันคือส่วนที่ *กันได้*
+        // ต่างจากยอดรวมที่เป็นต้นทุนของงานจริง — เอาไปรวมกันแล้วมันจะหายไปในตัวเลขใหญ่
+        if (t.tokens && t.tokens.errorRecovery) {
+          rows.push(["เสียกับ error", fmtTok(t.tokens.errorRecovery), "bad"]);
+        }
+        const box = $("#pills");
+        box.textContent = "";
+        for (const [label, value, tone] of rows) {
+          const p = el("span", "pill");
+          if (tone) p.dataset.tone = tone;
+          p.append(el("b", null, String(value)), document.createTextNode(label));
+          box.append(p);
+        }
+      }
+
+      const QUOTA_TH = {
+        session: "session (5 ชม.)",
+        weekly_all: "สัปดาห์นี้",
+        weekly_scoped: "สัปดาห์นี้ (เฉพาะรุ่น)",
+      };
+
+      /** อายุของ cache ที่เกินเท่านี้ = อย่าเชื่อ % นั้นว่าเป็นของสด */
+      const QUOTA_STALE_MS = 15 * 60_000;
+
+      /** เวลาที่เหลือแบบเปล่า ๆ ไม่มีคำนำ — ใช้ได้ทั้ง "รีเซ็ตอีก …" และ "ลองใหม่อีก …" */
+      function fmtLeft(leftMs) {
+        const h = Math.floor(leftMs / 3600e3);
+        const m = Math.floor((leftMs % 3600e3) / 60e3);
+        const s = Math.floor((leftMs % 60e3) / 1000);
+        if (h) return h + " ชม. " + m + " นาที";
+        // ชั่วโมงสุดท้ายนับวินาทีด้วย — เป็นช่วงเดียวที่คนจ้องมันจริง ๆ และเป็นตัวพิสูจน์ว่าแถบนี้เดินสด
+        if (m) return m + " นาที " + String(s).padStart(2, "0") + " วิ";
+        return s + " วิ";
+      }
+
+      function fmtResetLeft(leftMs) {
+        if (!isFinite(leftMs) || leftMs <= 0) return "ถึงเวลารีเซ็ตแล้ว";
+        return "รีเซ็ตอีก " + fmtLeft(leftMs);
+      }
+
+      function fmtResetIn(iso, nowMs) {
+        const t = Date.parse(iso || "");
+        if (!isFinite(t)) return "";
+        return fmtResetLeft(t - nowMs);
+      }
+
+      function fmtClock(ms) {
+        const d = new Date(ms);
+        return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+      }
+
+      /** ชื่อรุ่นแบบสั้นสำหรับบรรทัดสรุปหน้าต่าง — `claude-opus-5` → `opus` */
+      function shortModel(id) {
+        const m = /claude-([a-z]+)/.exec(String(id || ""));
+        return m ? m[1] : id || "unknown";
+      }
+
+      /**
+       * โหนดที่ต้องเดินทุกเฟรม (นาฬิกานับถอยหลัง) — เก็บ reference ไว้เพื่ออัปเดตเฉพาะข้อความ
+       * ไม่ต้องสร้าง DOM ใหม่ทุกวินาที ซึ่งจะทำให้แถบกะพริบ
+       */
+      let quotaTicks = [];
+
+      /*
+       * แถบโควตาของแพลน — session (5 ชม.) + รายสัปดาห์
+       *
+       * 🔴 เขียนใหม่ 2026-09-08 เพราะของเดิม "แสดงไม่ตรงและไม่ realtime" (ผู้ใช้แจ้งเอง)
+       *
+       * ของเดิมมีแหล่งเดียวคือ cache ใน `~/.claude.json` แล้ววาดมิเตอร์ตามนั้นตรง ๆ พร้อมหมายเหตุ
+       * บอกอายุตัวเล็ก ๆ ต่อท้าย. วัดสดเช้าวันนั้น: cache บอก **session 0% · ไม่มีเวลารีเซ็ต**
+       * ขณะที่ `GET /api/oauth/usage` บอก **7% · รีเซ็ต 07:50Z** — และ `fetchedAtMs` ของ cache
+       * **ไม่ขยับเลยตลอด 10 นาที**ที่จับตาดู ทั้งที่ใช้งานหนักต่อเนื่อง (มันเขียนตอน Claude Code
+       * สตาร์ต/ต่ออายุ token เท่านั้น). บทเรียน: **คนอ่านมิเตอร์ ไม่ได้อ่านเชิงอรรถ** ⇒ แค่บอกอายุ
+       * ไม่พอ ต้องไม่วาดมิเตอร์เลยเมื่อเลขนั้นไม่ได้พูดถึงหน้าต่างที่เปิดอยู่ตอนนี้
+       *
+       * ตอนนี้แถบนี้พูด 3 ชั้น แยกกันชัด ๆ:
+       *   1. **% อย่างเป็นทางการ** — จาก `--live-usage` (สด) หรือ cache (เก่า) · ถ้า `sessionKnown`
+       *      เป็น false แปลว่าเลขที่มีเป็นของหน้าต่าง**ก่อนหน้า** ⇒ ไม่วาดมิเตอร์ บอกตรง ๆ ว่ายังไม่รู้
+       *   2. **หน้าต่าง 5 ชม. ที่เดินอยู่จริง** — คำนวณสดจาก transcript ทุก ~2.5 วิ ไม่ใช้ credential
+       *      เลย: เปิดเมื่อไร รีเซ็ตอีกเท่าไร ใช้ไปกี่โทเค็น/กี่ request
+       *   3. **นาฬิกานับถอยหลัง** ที่เดินทุกเฟรม (700ms) — ตัวยืนยันด้วยสายตาว่าแถบนี้ "สด" จริง
+       */
+      function renderQuota(usage, nowMs, staleServer) {
+        const box = $("#quota");
+        const rows = (usage && usage.limits) || [];
+        /*
+         * 🔴 "server เป็นโค้ดเก่า" ต้องฟ้อง ไม่ใช่เงียบ (เพิ่ม 2026-09-07 หลังผู้ใช้เจอเอง)
+         *
+         * `server.mjs` ไม่มี hot-reload แต่ `index.html` ถูก `readFileSync` สดทุก request
+         * ⇒ หลังแก้โค้ดแล้ว refresh หน้าเดียว จะได้ **HTML ใหม่คุยกับ server เก่า** ซึ่ง payload
+         * ไม่มีฟิลด์ที่ UI ใหม่ต้องใช้ · ของเดิมตอบสนองด้วยการซ่อนแถบเฉย ๆ ⇒ ผู้ใช้เห็นแค่
+         * "ฟีเจอร์ไม่มา" โดยไม่มีอะไรบอกว่าเพราะอะไร ซึ่งเป็นความผิดพลาดแบบเดียวกับเพดานที่
+         * มองไม่เห็น: **ความเงียบไม่ใช่คำตอบ** ตอนนี้มันบอกวิธีแก้ตรง ๆ
+         *
+         * เดิมเช็คแค่ `totals.tokens` แล้วขยับมาเช็ค `sessionKnown`. ตอนนี้ payload มี `usage.v`
+         * เป็นเลขรุ่นตรง ๆ — ต้องขยับทุกครั้งที่ UI เริ่มพึ่งฟิลด์ใหม่ (v2 = `sessionEstimate` +
+         * `live.lastOkMs`/`live.nextTryMs` ที่เพิ่มตอนแก้ปัญหา "ยังไม่รู้ %" 2026-09-08 รอบสอง)
+         */
+        const oldServer = staleServer || (usage && (usage.v || 1) < 2);
+        if (oldServer) {
+          const sig = "stale-server";
+          if (box.dataset.sig === sig) return;
+          box.dataset.sig = sig;
+          quotaTicks = [];
+          box.hidden = false;
+          box.textContent = "";
+          const q = el("span", "q");
+          q.append(el("b", "stale", "⚠️ server ยังเป็นโค้ดเก่า"));
+          box.append(
+            q,
+            el(
+              "span",
+              null,
+              "— หน้าเว็บอ่านไฟล์ใหม่แล้วแต่ process ของ server ยังเป็นตัวเดิม (ไม่มี hot-reload) " +
+                "⇒ โควตาและยอดโทเค็นยังมาไม่ได้ · กด Ctrl+C แล้วรัน node server.mjs ใหม่",
+            ),
+          );
+          return;
+        }
+
+        const win = usage && usage.window;
+        // ซ่อนทั้งแถบเมื่อไม่มีอะไรจะพูดเลย — ดีกว่าโชว์ 0% ที่ไม่มีที่มา
+        if (!rows.length && !win) {
+          box.hidden = true;
+          box.textContent = "";
+          box.dataset.sig = "";
+          quotaTicks = [];
+          return;
+        }
+
+        const live = usage.live || {};
+        const isLive = usage.source === "live";
+        const ageMs = usage.fetchedAtMs ? nowMs - usage.fetchedAtMs : null;
+        const stale = !isLive && ageMs != null && ageMs > QUOTA_STALE_MS;
+        /*
+         * `sessionKnown` = "% ที่เรามี พูดถึงหน้าต่างที่เปิดอยู่ตอนนี้จริงไหม" — server เป็นคนตัดสิน
+         * โดยเทียบเวลาที่อ่านค่ากับเวลาที่หน้าต่างเปิด. นี่คือหัวใจของการแก้รอบนี้: เลข 0% ที่เคย
+         * ค้างอยู่หลายชั่วโมงคือ % ของหน้าต่าง**ที่จบไปแล้ว**
+         */
+        const sessionKnown = usage.sessionKnown !== false;
+        /*
+         * ...และเมื่อ "ยังไม่รู้" จริง ๆ ยังมีชั้นสำรองอีกชั้นก่อนจะยอมแพ้: `sessionEstimate` คือ %
+         * ที่ server ประมาณจากโทเค็นในหน้าต่างนี้ คูณตัวคูณที่เรียนมาจากการอ่านค่าจริงครั้งก่อน ๆ
+         * มันวาดมิเตอร์ได้ แต่ต้องหน้าตาไม่เหมือนของจริง (ขอบประ + `≈`) — ดูคลาส `.meter.est`
+         */
+        const estimate = (!sessionKnown && usage.sessionEstimate) || null;
+        // แสดงเฉพาะที่ active หรือเป็น 2 ตัวหลักที่ผู้ใช้ขอ (session + สัปดาห์) ตัว scoped ที่ไม่ active
+        // ไม่ต้องรบกวนพื้นที่
+        const show = rows.filter((r) => r.isActive || r.kind === "session" || r.kind === "weekly_all");
+
+        /*
+         * sig = ทุกอย่างที่ทำให้ "โครงสร้าง" ของแถบเปลี่ยน. นาฬิกานับถอยหลังไม่อยู่ในนี้โดยตั้งใจ —
+         * มันเดินทุกเฟรมผ่าน `quotaTicks` ด้านล่าง ถ้าเอามาใส่ sig แถบจะถูกสร้างใหม่ทุกวินาที
+         */
+        const sig = [
+          show.map((r) => r.kind + ":" + r.percent + ":" + r.severity + ":" + (r.resetsAt || "")).join("|"),
+          usage.source,
+          sessionKnown ? "known" : estimate ? "est:" + estimate.percent : "unknown",
+          stale ? "stale" : "fresh",
+          isLive && live.ok ? "" : Math.floor((ageMs || 0) / 60000),
+          live.enabled ? (live.ok ? "live-ok" : "live-err:" + (live.error || "")) : "",
+          // รอบยิงถัดไปต้องอยู่ใน sig ด้วย ไม่งั้นนาฬิกา "ลองใหม่อีก …" จะเดินเลยเวลาเก่าไปติดลบ
+          live.nextTryMs || "",
+          win ? win.startedAtMs + ":" + win.exact + ":" + win.tokens.requests : "no-win",
+        ].join("~");
+        if (box.dataset.sig !== sig) {
+          box.dataset.sig = sig;
+          box.hidden = false;
+          box.textContent = "";
+          quotaTicks = [];
+
+          for (const r of show) {
+            const q = el("span", "q");
+            const name = QUOTA_TH[r.kind] || r.kind;
+            q.append(el("b", null, name + (r.scope ? " · " + r.scope : "")));
+
+            if (r.kind === "session" && !sessionKnown && estimate) {
+              /*
+               * รู้แบบประมาณ = วาดได้ แต่ต้องดูออกว่าประมาณ. เกิดเฉพาะช่วงต้นหน้าต่างใหม่ที่ยัง
+               * ดึงเลขทางการไม่ผ่าน — เมื่อก่อนช่วงนี้คือ "ยังไม่รู้ %" ซึ่งแปลว่าแถบว่างเปล่า
+               * ทั้งที่เรารู้อยู่แล้วว่าเผาไปกี่โทเค็นและเคยเห็นว่ากี่โทเค็นเท่ากับกี่ %
+               */
+              const pct = Math.max(0, Math.min(100, Math.round(estimate.percent)));
+              const tone = pct >= 90 ? "bad" : pct >= 70 ? "warn" : "";
+              const meter = el("span", "meter est");
+              if (tone) meter.dataset.tone = tone;
+              const fill = el("i");
+              fill.style.width = pct + "%";
+              meter.append(fill);
+              q.append(meter, el("span", "est-num", "≈" + pct + "%"));
+              q.append(el("span", null, "· ประมาณจากโทเค็นในหน้าต่างนี้ · เลขทางการยังมาไม่ถึง"));
+              q.title =
+                "ยังไม่ได้อ่าน % ของหน้าต่างที่เปิดอยู่จาก /api/oauth/usage\n" +
+                "ตัวเลขนี้จึงเป็นการประมาณ: โทเค็นที่เผาในหน้าต่างนี้ × อัตรา %-ต่อโทเค็น\n" +
+                (estimate.seeded
+                  ? "อัตรานั้นย้อนคำนวณจาก cache ของ Claude Code (ยังไม่เคยอ่านค่าจริงได้เลยรอบนี้)\n" +
+                    "จึงหยาบกว่าปกติ — พอยิง API ผ่านครั้งแรกมันจะถูกแทนที่ด้วยของจริงทันที\n"
+                  : "ที่เรียนมาจากการอ่านค่าจริงครั้งก่อน ๆ ในเครื่องนี้\n") +
+                "สัดส่วนรุ่นที่ใช้ต่างไปเมื่อไร ค่านี้ก็คลาดไปด้วย\n" +
+                "พอดึงเลขจริงได้เมื่อไร ขอบประจะหายและ ≈ จะหายไปเอง";
+            } else if (r.kind === "session" && !sessionKnown) {
+              /*
+               * ไม่รู้ = ไม่วาด. ช่องประ ๆ กว้างเท่ามิเตอร์จริงเพื่อไม่ให้แถวกระตุกตอนตัวเลขมา
+               * และข้อความบอกทั้ง "ทำไมไม่รู้" กับ "ทำยังไงถึงจะรู้" — เพราะแค่ซ่อนเฉย ๆ
+               * ผู้ใช้จะเจอปัญหาเดิมคือ "ฟีเจอร์หายไปโดยไม่บอกอะไร"
+               */
+              q.append(el("span", "meter-unknown"));
+              q.append(el("span", "unknown", "ยังไม่รู้ %"));
+              q.append(
+                el(
+                  "span",
+                  null,
+                  usage.cache && usage.cache.fetchedAtMs
+                    ? "· เลขที่มีเป็นของหน้าต่างก่อนหน้า (อ่านไว้ " + fmtClock(usage.cache.fetchedAtMs) + ")" +
+                        (live.enabled ? "" : " · รันด้วย --live-usage เพื่อดึงเลขจริง")
+                    : "· ยังไม่มีค่าจากฝั่งบัญชี",
+                ),
+              );
+            } else {
+              const pct = Math.max(0, Math.min(100, Math.round(r.percent)));
+              const tone = r.severity !== "normal" || pct >= 90 ? "bad" : pct >= 70 ? "warn" : "";
+              const meter = el("span", "meter");
+              if (tone) meter.dataset.tone = tone;
+              const fill = el("i");
+              fill.style.width = pct + "%";
+              meter.append(fill);
+              q.append(meter, el("span", null, pct + "%"));
+              if (r.resetsAt) {
+                // นาฬิกาของแถวนี้ — จำ element ไว้แล้วให้ลูปด้านล่างเดินมันทุกเฟรม
+                const tick = el("span", null, "");
+                quotaTicks.push({ node: tick, at: Date.parse(r.resetsAt), prefix: "· " });
+                q.append(tick);
+              }
+            }
+            box.append(q);
+          }
+
+          /*
+           * แถวหน้าต่าง 5 ชม. ที่คำนวณสดจาก transcript — ชั้นข้อมูลที่ **ไม่มีวันเก่า** เพราะไม่ได้
+           * รอใครมาเขียน cache ให้. ต่อให้ % อย่างเป็นทางการยังไม่รู้ แถวนี้ก็ยังตอบได้ว่าหน้าต่าง
+           * เปิดมาแล้วเท่าไร เหลืออีกเท่าไร และเผาไปกี่โทเค็น
+           */
+          if (win) {
+            const q = el("span", "q win");
+            q.append(el("b", null, "หน้าต่างนี้"));
+            const total =
+              (win.tokens.input || 0) + (win.tokens.cacheCreate || 0) + (win.tokens.cacheRead || 0) + (win.tokens.output || 0);
+            q.append(
+              el(
+                "span",
+                null,
+                (win.exact ? "เริ่ม " : "เริ่ม ≈") +
+                  fmtClock(win.startedAtMs) +
+                  " · " +
+                  win.tokens.requests +
+                  " request · " +
+                  fmtTok(total) +
+                  " โทเค็น",
+              ),
+            );
+            if (win.byModel && win.byModel.length) {
+              q.append(
+                el(
+                  "span",
+                  null,
+                  "· " + win.byModel.map((m) => shortModel(m.model) + " " + fmtTok(m.billed)).join(" · "),
+                ),
+              );
+            }
+            /*
+             * นาฬิกาของหน้าต่าง — ใส่เฉพาะเมื่อแถว session ไม่ได้นับถอยหลังให้อยู่แล้ว. ตอน
+             * `--live-usage` ทำงาน สองแถวนี้อ้าง `resets_at` ก้อนเดียวกัน ⇒ ถ้าใส่ทั้งคู่จะได้
+             * "รีเซ็ตอีก 4 ชม. 17 นาที" โผล่สองครั้งในแถบเดียว ซึ่งเป็นสัญญาณรบกวนล้วน ๆ
+             */
+            const sessionRowTicks = sessionKnown && show.some((r) => r.kind === "session" && r.resetsAt);
+            if (!sessionRowTicks) {
+              const tick = el("span", null, "");
+              quotaTicks.push({ node: tick, at: win.resetsAtMs, prefix: "· " });
+              q.append(tick);
+            }
+            q.title =
+              (win.exact
+                ? "ขอบเขตหน้าต่างมาจาก resets_at ของฝั่งบัญชี — ตรงเป๊ะ"
+                : "ประมาณจาก transcript: request แรกเปิดหน้าต่าง, request แรกที่ห่างเกิน 5 ชม. เปิดหน้าต่างถัดไป\n" +
+                  "วัดเทียบกับค่าจริง 2026-09-08 คลาดเคลื่อน ~5 นาที") +
+              "\n\nโทเค็นในหน้าต่างนี้ (ทุก session บนเครื่อง):" +
+              "\n   cache read " + fmtTok(win.tokens.cacheRead || 0) +
+              " · cache write " + fmtTok(win.tokens.cacheCreate || 0) +
+              "\n   input " + fmtTok(win.tokens.input || 0) +
+              " · output " + fmtTok(win.tokens.output || 0) +
+              (win.tokens.thinking ? " (คิด " + fmtTok(win.tokens.thinking) + ")" : "") +
+              "\n\nตัวเลขต่อรุ่นไม่รวม cache read — มันกินยอดรวมจนกลบส่วนที่เป็นงานใหม่";
+            box.append(q);
+          }
+
+          /*
+           * หมายเหตุปิดท้าย: เลข % ที่เห็นมาจากไหน และเชื่อได้แค่ไหน
+           *
+           * 🔴 เดิมบรรทัดนี้พูดผิด (แก้ 2026-09-08 รอบสอง): พอยิง API ไม่ผ่านมันเขียนว่า "เลขด้านบน
+           * มาจาก cache" ทุกครั้ง ทั้งที่ตอนนี้ server ยังใช้เลขจริงชุดล่าสุดที่อ่านมาได้อยู่
+           * ⇒ ต้องแยก 2 กรณีออกจากกัน แล้วบอกทั้ง "อ่านไว้เมื่อไร" และ "จะลองใหม่อีกเมื่อไร"
+           */
+          let noteText;
+          let noteCls = null;
+          let retryAt = null;
+          if (live.enabled && live.ok) noteText = "· % สดจาก /api/oauth/usage";
+          else if (live.enabled && !live.lastTryMs) {
+            // ยังไม่เคยยิงเลย (วินาทีแรกหลังสตาร์ต) — "ยังไม่เสร็จ" ไม่ใช่ "ล้มเหลว"
+            noteText = "· กำลังดึง % สดจาก /api/oauth/usage…";
+          } else if (live.enabled && isLive) {
+            // ยิงรอบล่าสุดไม่ผ่าน แต่ยังยืนบนเลขจริงชุดก่อนหน้าอยู่ — ไม่ได้ถอยไป cache
+            noteCls = "stale";
+            noteText =
+              "· % จาก /api/oauth/usage อ่านไว้ " + fmtDur(ageMs) + " ที่แล้ว · รีเฟรชไม่ผ่าน (" +
+              (live.error || "ไม่ทราบสาเหตุ") + ")";
+            retryAt = live.nextTryMs || null;
+          } else if (live.enabled) {
+            noteCls = "stale";
+            noteText = "· ดึง % สดไม่สำเร็จ (" + (live.error || "ไม่ทราบสาเหตุ") + ") — เลขด้านบนมาจาก cache";
+            retryAt = live.nextTryMs || null;
+          } else if (ageMs == null) noteText = "· ไม่รู้อายุของข้อมูล";
+          else if (stale) {
+            noteCls = "stale";
+            noteText =
+              "· % มาจาก cache อายุ " + fmtDur(ageMs) + " — พิมพ์ /usage ใน Claude Code หรือรันด้วย --live-usage";
+          } else noteText = "· % มาจาก cache อ่านเมื่อ " + fmtDur(ageMs) + " ที่แล้ว";
+          const note = el("span", noteCls, noteText);
+          if (isLive && live.ok) {
+            const tick = el("span", null, "");
+            quotaTicks.push({ node: tick, at: null, since: usage.fetchedAtMs, prefix: " · อัปเดต " });
+            note.append(tick);
+          }
+          if (retryAt && retryAt > nowMs) {
+            // นับถอยหลังไปหารอบยิงถัดไป — บอกว่า "ระบบกำลังจัดการอยู่" ไม่ใช่ค้างตายไปเฉย ๆ
+            const tick = el("span", null, "");
+            quotaTicks.push({ node: tick, at: retryAt, prefix: " · ลองใหม่อีก ", plain: true });
+            note.append(tick);
+          }
+          box.append(note);
+        }
+
+        /*
+         * เดินนาฬิกาทุกเฟรม — นี่คือส่วนที่ทำให้แถบ "realtime" จริง ๆ ในสายตา. snapshot มาทุก 700ms
+         * พร้อม `nowMs` ใหม่ ⇒ ตัวเลขขยับเองโดยไม่ต้อง refresh และไม่ต้องสร้าง DOM ใหม่
+         */
+        for (const t of quotaTicks) {
+          if (t.at != null) {
+            if (t.plain) {
+              // นับถอยหลังธรรมดา (รอบยิง API รอบหน้า) — ไม่ใช่นาฬิการีเซ็ตโควตา จึงไม่มีคำว่า "รีเซ็ต"
+              const left = t.at - nowMs;
+              t.node.textContent = left > 0 ? t.prefix + fmtLeft(left) : " · กำลังลองใหม่…";
+              continue;
+            }
+            t.node.textContent = t.prefix + fmtResetLeft(t.at - nowMs);
+            continue;
+          }
+          // "อัปเดต 0ms ที่แล้ว" อ่านแล้วสะดุด — ต่ำกว่า 1 วิ พูดว่า "เมื่อครู่" ไปเลย
+          const age = Math.max(0, nowMs - t.since);
+          t.node.textContent = age < 1000 ? t.prefix + "เมื่อครู่" : t.prefix + fmtDur(age) + " ที่แล้ว";
+        }
+      }
+
+      /*
+       * The strip counts ONLY what is running (user directive 2026-09-04). It used to read
+       * `sub-agent 3 วิ่ง · 11 มี error · 56 ทั้งหมด` with a bar whose cells were mostly grey
+       * "done" — so the strip was a monument to finished work with the live part buried in it.
+       * Now one cell = one sub-agent that is working right now, and an empty strip means nothing
+       * is running, which is a true and useful thing to see at a glance.
+       *
+       * Counts still come from the server's subTotals, never from the rows that happened to
+       * arrive — the send cap means a 100-agent fan-out ships 24 rows.
+       */
+      function renderBand(agents) {
+        let running = 0,
+          runErrors = 0;
+        const models = {};
+        for (const a of agents) {
+          const st = a.subTotals || {};
+          running += st.running || 0;
+          runErrors += st.runningWithErrors || 0;
+          for (const [k, n] of Object.entries(st.runningModels || {})) models[k] = (models[k] || 0) + n;
+        }
+        $("#band-label").textContent = running
+          ? `sub-agent ${running} ตัวกำลังวิ่ง` + (runErrors ? ` · ${runErrors} มี error` : "")
+          : "ยังไม่มี sub-agent วิ่งอยู่";
+
+        const bar = $("#band-bar");
+        const cells = Math.min(running, 60);
+        while (bar.children.length > cells) bar.lastChild.remove();
+        while (bar.children.length < cells) bar.append(el("i"));
+        const nErr = Math.round(runErrors * (cells / (running || 1)));
+        [...bar.children].forEach((c, i) => {
+          c.dataset.s = i < nErr ? "err" : "run";
+        });
+        bar.title = running
+          ? `${running} ตัวกำลังวิ่ง · ${runErrors} มี error · ตัวที่จบแล้วดูได้ในแผงเมื่อกด node`
+          : "ตัวที่จบแล้วดูได้ในแผงเมื่อกด node";
+
+        const lg = $("#legend");
+        lg.textContent = "";
+        for (const [tag, n] of Object.entries(models).sort((a, b) => b[1] - a[1])) {
+          const s = el("span");
+          const dot = el("i");
+          dot.style.background = modelColor(tag);
+          s.append(dot, document.createTextNode(tag + " " + n));
+          s.title = "model ของ sub-agent ที่กำลังวิ่ง (นับทุกตัวที่วิ่ง ไม่ใช่แค่ที่วาด)";
+          lg.append(s);
+        }
+      }
+
+      // =====================================================================
+      // helpers the graph needs
+      // =====================================================================
+
+      function sortChildren(subs) {
+        // Deterministic order so a child keeps its ring slot across ticks. Problems first, then
+        // still-running, then oldest-started, grouped by workflow so a workflow reads as a cluster.
+        const rank = (s) => (s.errors ? 0 : s.running ? 1 : 2);
+        const grp = (s) => s.workflowId || "";
+        return [...subs].sort(
+          (a, b) =>
+            (grp(a) < grp(b) ? -1 : grp(a) > grp(b) ? 1 : 0) ||
+            rank(a) - rank(b) ||
+            Date.parse(a.startedTs || 0) - Date.parse(b.startedTs || 0) ||
+            (a.agentId < b.agentId ? -1 : 1),
+        );
+      }
+
+      /*
+       * เรียง sub-agent เป็นลำดับ DFS ของต้นไม้ พ่ออยู่ก่อนลูกเสมอ
+       *
+       * ใช้กับ "ลิสต์" ที่ต้องอ่านเป็นบรรทัด — คู่กับการเยื้องตาม `depth` แล้วจะเห็นว่าใครแตกมาจากใคร
+       * ตัวที่หาพ่อไม่เจอ (พ่อไม่ได้ถูกส่งมาในเฟรมนี้) ถือเป็นราก เพื่อไม่ให้แถวหายไปเงียบ ๆ
+       */
+      function treeOrder(subs) {
+        const byId = new Map(subs.map((s) => [s.agentId, s]));
+        const kids = new Map();
+        const roots = [];
+        for (const s of subs) {
+          const pid = s.parentAgentId && byId.has(s.parentAgentId) ? s.parentAgentId : null;
+          if (!pid) roots.push(s);
+          else {
+            if (!kids.has(pid)) kids.set(pid, []);
+            kids.get(pid).push(s);
+          }
+        }
+        const out = [];
+        const seen = new Set();
+        const walk = (list) => {
+          for (const s of sortChildren(list)) {
+            if (seen.has(s.agentId)) continue; // กัน parentAgentId ที่ชี้วนกันเอง
+            seen.add(s.agentId);
+            out.push(s);
+            if (kids.has(s.agentId)) walk(kids.get(s.agentId));
+          }
+        };
+        walk(roots);
+        // ตัวที่ยังไม่ถูกเดินถึงเพราะวน — เอาต่อท้ายไว้ ดีกว่าหาย
+        for (const s of subs) if (!seen.has(s.agentId)) out.push(s);
+        return out;
+      }
+
+      /*
+       * ขนาดวง = น้ำหนักของงานของ agent ตัวนั้น (จำนวน tool ที่เรียกไปแล้ว)
+       *
+       * 🔴 สเกลเดิม `7 + 4.4·√tools` **อิ่มตัวที่ 9 tool** — วงของ agent ที่เรียก 9 ครั้งกับ 142 ครั้ง
+       * ใหญ่เท่ากันเป๊ะ ซึ่งขัดกับสิ่งที่ README บอกว่าวงสื่ออะไร. เดิมมันไม่โดนจับเพราะตัวเลขที่ป้อน
+       * เข้ามาเป็นยอดจาก tail 256KB (ตัน ๆ อยู่ที่ 20-30) แต่ตั้งแต่ 2026-09-07 ยอดเป็นยอดจริง
+       * ตลอดชีวิต (1–142 ที่วัดได้บนเครื่องนี้) ⇒ ต้องเปลี่ยนสเกลตามข้อมูลที่เปลี่ยนไป
+       *
+       * log ไม่ใช่ √ เพราะช่วงที่ต้องแยกให้ออกคือ **ช่วงล่าง**: ความต่างระหว่าง 2 กับ 10 tool
+       * มีความหมายกับคนดูมากกว่าความต่างระหว่าง 120 กับ 142 · ค่าที่ได้จากการวัดจริง:
+       * 1→10.5px · 4→12.5 · 10→14.3 · 25→16.1 · 59→18.0 · 142→19.9
+       */
+      const NODE_TOOLS_FULL = 150;
+
+      function nodeRadius(sub) {
+        const tools = Math.max(1, sub.tools || 1);
+        const t = Math.min(1, Math.log(1 + tools) / Math.log(1 + NODE_TOOLS_FULL));
+        return Math.max(NODE_MIN, Math.min(NODE_MAX, NODE_MIN + (NODE_MAX - NODE_MIN) * t));
+      }
+
+      function arcPath(cx, cy, r, a0, a1) {
+        const x0 = cx + r * Math.cos(a0);
+        const y0 = cy + r * Math.sin(a0);
+        const x1 = cx + r * Math.cos(a1);
+        const y1 = cy + r * Math.sin(a1);
+        const large = a1 - a0 > Math.PI ? 1 : 0;
+        return `M ${x0.toFixed(1)} ${y0.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+      }
+
+      // =====================================================================
+      // force simulation
+      // =====================================================================
+
+      /*
+       * A real force-directed layout, in the spirit of Highcharts' networkgraph: repulsion between
+       * every pair, Hooke springs on the real edges, gravity to centre, Euler integration with
+       * friction, draggable nodes, and a loop that SETTLES and then stops.
+       *
+       * Every constant below was measured, not guessed (the numbers come from a simulation study
+       * run against this exact graph shape). The four things that make a hand-rolled sim behave:
+       *
+       *  1. ARC SPRING (K.arc) — without it the ring's tangential direction is force-neutral and
+       *     children slide around the hub forever: measured 9.84 degrees of drift with only 0.89px
+       *     of radial change over 200 frames, and the layout never froze.
+       *  2. STATIC FRICTION (K.vsleep) — zero any velocity under 0.05px/frame so rest is EXACT
+       *     rather than asymptotic. After the freeze fires, 200 further steps move 0 nodes by 0px.
+       *  3. FOUR EXPLOSION GUARDS — 1/d² is clamped at d_min, exact coincidence is broken with a
+       *     deterministic hashed vector (never Math.random, which would break reproducibility),
+       *     velocity is capped, and per-frame displacement is capped as a last resort.
+       *  4. POSITIONS ARE OWNED BY THE SIM — a snapshot may change a node's label, colour, tool
+       *     count or running flag, and must never touch x/y/vx/vy. Re-seeding from the snapshot
+       *     every 700ms is the single most likely way this ships broken.
+       */
+      const K = {
+        rep: 3600,
+        dmin: 24,
+        arc: 0.018,
+        anch: 0.06,
+        grav: 0.0012,
+        /*
+         * damp/vmax are tuned for a WATCHABLE settle, not the fastest one. At damp 0.80 / vmax 10
+         * the 45-node bloom finished in ~0.45s — measured 0px of travel by the time a test could
+         * sample it, which on screen reads as a single jolt rather than motion. Highcharts' own
+         * default friction is -0.981 (very little energy lost per frame), which is why its graphs
+         * drift into place. 0.90 keeps that floaty character and still reaches exact rest because
+         * the static-friction floor below cuts the long tail.
+         */
+        damp: 0.92,
+        vmax: 3.2,
+        // frames the trip home takes (see the a.dying branch): 50 ~= 0.83s at 60fps
+        home: 50,
+        vsleep: 0.05,
+        dmax: 14,
+        sep: 6,
+        relax: 0.62,
+        eps: 0.08,
+        hold: 12,
+        springHub: 0.05,
+      };
+
+      /** key -> node. THE only place positions live. */
+      const sim = new Map();
+      let simEdges = [];
+      let world = { w: 1200, h: 800 };
+      let quiet = 0;
+      let raf = 0;
+      let frameScale = 1;
+      let lastFrame = 0;
+      let dragging = null;
+
+      function hubKey(sessionId) {
+        return "hub:" + sessionId;
+      }
+
+      function wake() {
+        quiet = 0;
+        if (!raf) {
+          lastFrame = 0;
+          raf = requestAnimationFrame(tick);
+        }
+      }
+
+      /** Deterministic unit vector for breaking exact coincidence — never Math.random(). */
+      function tieBreak(i, j) {
+        const h = ((i * 73856093) ^ (j * 19349663)) % 97;
+        return { x: h / 97 - 0.5, y: 0.37 };
+      }
+
+      function wrapPi(a) {
+        return a > Math.PI ? a - 2 * Math.PI : a < -Math.PI ? a + 2 * Math.PI : a;
+      }
+
+      /** Ring rest length, quantized to 40px buckets with shrink hysteresis.
+       *  Unquantized, a spawn changed the radius on 84 of 85 topology events and dragged every
+       *  node with it (worst single event 109px). Quantized: 6 changes in the same 85 events. */
+      function ringLength(degree, prev) {
+        const want = 40 * Math.ceil((110 + 5.5 * degree) / 40);
+        const capped = Math.max(140, Math.min(340, want));
+        if (prev == null) return capped;
+        if (capped > prev) return capped; // grow immediately
+        return capped <= prev - 80 ? capped : prev; // shrink only after two buckets
+      }
+
+      /** Reconcile the simulation with a snapshot. Adds, removes, retargets — never repositions. */
+      function syncSim(agents, W, H) {
+        world = { w: W, h: H };
+        const seen = new Set();
+        let topologyChanged = false;
+
+        // hub anchors: stable columns, ordered by first-seen session
+        for (const a of agents) if (!hubColumn.has(a.sessionId)) hubColumn.set(a.sessionId, hubColumn.size);
+        const ordered = [...agents].sort((x, y) => hubColumn.get(x.sessionId) - hubColumn.get(y.sessionId));
+        const colW = W / Math.max(1, ordered.length);
+
+        ordered.forEach((a, i) => {
+          const key = hubKey(a.sessionId);
+          seen.add(key);
+          let h = sim.get(key);
+          const ax = colW * (i + 0.5);
+          const ay = H / 2;
+          if (!h) {
+            h = { key, kind: 0, x: ax, y: ay, vx: 0, vy: 0, r: HUB_R, q: 3.2, m: 8, sessionId: a.sessionId, fresh: true };
+            sim.set(key, h);
+            topologyChanged = true;
+          }
+          // A hub moving column must not make the whole graph swim: translate it and its subtree
+          // rigidly, then let the sim resume from there.
+          if (h.ax !== ax || h.ay !== ay) {
+            if (h.ax != null) {
+              const dx = ax - h.ax;
+              const dy = ay - h.ay;
+              for (const n of sim.values()) {
+                if (n === h || n.parent === key) {
+                  n.x += dx;
+                  n.y += dy;
+                  n.vx = 0;
+                  n.vy = 0;
+                }
+              }
+            }
+            h.ax = ax;
+            h.ay = ay;
+            topologyChanged = true;
+          }
+          h.data = a;
+
+          /*
+           * ลูกทุกระดับ ไม่ใช่แค่ชั้น 1 (คำสั่งผู้ใช้: "อยากให้แสดงทุกระดับ ไปเลย")
+           *
+           * เรียงตาม `depth` ก่อนเสมอ เพราะ node ของพ่อต้องมีอยู่ใน `sim` แล้วตอนที่ลูกถูกสร้าง
+           * ไม่งั้น `parentKeyOf` จะหาพ่อไม่เจอแล้วเอาลูกไปแขวนกับ hub = ผังผิด
+           */
+          const running = sortChildren((a.subagents || []).filter((s) => s.running))
+            .slice(0, MAX_DRAWN)
+            .sort((x, y) => (x.depth || 1) - (y.depth || 1));
+          /** key ของพ่อจริง — ลูกชั้น 2+ แขวนกับ agent ตัวที่ spawn มัน ไม่ใช่กับ session */
+          const parentKeyOf = (s) => {
+            const pk = s.parentAgentId ? "kid:" + s.parentAgentId : null;
+            return pk && sim.has(pk) ? pk : key;
+          };
+          // degree/ring ของ hub นับแค่ลูกที่แขวนกับ hub จริง ๆ (ชั้น 1) — ลูกชั้นลึกไปโคจรรอบพ่อมัน
+          const topLevel = running.filter((s) => parentKeyOf(s) === key);
+          h.degree = topLevel.length;
+          h.link = ringLength(topLevel.length, h.link);
+
+          for (const s of running) {
+            const k = "kid:" + s.agentId;
+            const pKey = parentKeyOf(s);
+            const pNode = sim.get(pKey);
+            seen.add(k);
+            let nd = sim.get(k);
+            if (!nd) {
+              /*
+               * Insertion seeding: the newcomer takes the BISECTOR OF THE WIDEST ANGULAR GAP among
+               * its siblings, and no existing target is touched. Measured against the
+               * alternatives on a settled graph: gap-bisector moved existing nodes 10.9px max /
+               * 1.04px avg and settled in 38 frames; random seeding 20.3px / 4.13px / 77 frames;
+               * hub-centre 10.4px / 1.19px / 122 frames.
+               */
+              const sibs = [...sim.values()].filter((x) => x.parent === pKey);
+              const angs = sibs.map((x) => x.ta).sort((p, q) => p - q);
+              let ta = -Math.PI / 2;
+              if (h.fresh) {
+                // first batch: lay the targets out evenly so the bloom lands on a tidy ring
+                ta =
+                  -Math.PI / 2 +
+                  (sibs.length * 2 * Math.PI) /
+                    Math.max(1, running.filter((x) => parentKeyOf(x) === pKey).length);
+              } else if (angs.length) {
+                let best = -1;
+                for (let idx = 0; idx < angs.length; idx++) {
+                  const a0 = angs[idx];
+                  const a1 = idx + 1 < angs.length ? angs[idx + 1] : angs[0] + 2 * Math.PI;
+                  if (a1 - a0 > best) {
+                    best = a1 - a0;
+                    ta = (a0 + a1) / 2;
+                  }
+                }
+              }
+              const rad = sibs.length ? sibs.reduce((t, x) => t + x.tr, 0) / sibs.length : h.link;
+              /*
+               * Two cases that want opposite things:
+               *  - FIRST PAINT (hub just appeared): seed well inside the ring so the graph is seen
+               *    to bloom outward into place. Seeding at equilibrium made it snap to a still
+               *    picture on frame 1 — measured 0 nodes moving in the first 700ms.
+               *  - LATER SPAWN: seed at the sibling radius on the widest gap's bisector, which
+               *    measured 10.9px max disturbance to existing nodes vs 20.3px for random.
+               */
+              const seedR = h.fresh ? rad * 0.12 + 10 : h.r + 6;
+              // which way this child curves, on birth and again on the way home
+              const spin = sibs.length % 2 ? -1 : 1;
+              nd = {
+                key,
+                kind: 1,
+                parent: hubKey(a.sessionId),
+                ta,
+                tr: rad,
+                x: h.x + seedR * Math.cos(ta),
+                y: h.y + seedR * Math.sin(ta),
+                /*
+                 * Outward kick, so it visibly shoots out of the parent instead of appearing.
+                 * The kick is not purely radial: a straight radial launch reached the ring in
+                 * ~0.7s along a spoke, which reads as a jump. A tangential component of the same
+                 * order makes the child ARC out and then get pulled onto its angle by the arc
+                 * spring — the same physics, a path the eye can follow. Alternating sign keeps
+                 * consecutive spawns from all curving the same way.
+                 */
+                vx: h.fresh ? 0 : Math.cos(ta) * 1.9 - Math.sin(ta) * 1.7 * spin,
+                vy: h.fresh ? 0 : Math.sin(ta) * 1.9 + Math.cos(ta) * 1.7 * spin,
+                q: 1,
+                m: 1,
+                born: true,
+                spin,
+                launched: !h.fresh,
+              };
+              nd.key = k;
+              sim.set(k, nd);
+              if (!h.fresh) h.rippleAt = (h.rippleAt || 0) + 1;
+              topologyChanged = true;
+            }
+            nd.parent = pKey;
+            /*
+             * รัศมีวงโคจร: ลูกชั้นลึกใช้ leash สั้นลงชั้นละ 0.6 เท่า (พื้น 26px)
+             * เพื่อให้กลุ่มของพ่อ–ลูกอ่านเป็นก้อนเดียว ไม่ใช่วงใหญ่ซ้อนวงใหญ่จนแยกไม่ออกว่าใครเป็นลูกใคร
+             */
+            nd.tr =
+              pKey === key ? h.link : Math.max(26, (pNode && pNode.tr ? pNode.tr : h.link) * 0.6);
+            nd.data = s;
+            nd.sessionId = a.sessionId;
+            nd.r = nodeRadius(s);
+          }
+        });
+
+        for (const [k, n] of sim) {
+          if (seen.has(k)) {
+            // back from the dead (a task-notification that turned out to be premature): clear the
+            // flight state too, or a second death would fly the stale offset from the first
+            n.dying = false;
+            n.dyingTicks = 0;
+            n.h0x = undefined;
+            n.h0y = undefined;
+            continue;
+          }
+          // A hub that is gone goes at once; a CHILD flies home first. Popping out of existence
+          // reads as data loss — retracting into the parent reads as "that one finished".
+          if (n.kind === 0 || !sim.has(n.parent)) {
+            sim.delete(k);
+            topologyChanged = true;
+          } else if (!n.dying) {
+            n.dying = true;
+            n.dyingTicks = 0;
+            topologyChanged = true;
+          }
+        }
+        // every child of a brand-new hub gets the bloom seed; after this pass the hub is settled
+        for (const nd of sim.values()) if (nd.kind === 0) nd.fresh = false;
+
+        simEdges = [];
+        for (const n of sim.values()) {
+          if (n.kind === 1 && sim.has(n.parent)) {
+            simEdges.push([n, sim.get(n.parent), K.springHub, n.tr]);
+          }
+        }
+        if (topologyChanged) wake();
+        return topologyChanged;
+      }
+
+      /** One physics step. Returns true when the layout has settled. */
+      function step() {
+        const nodes = [...sim.values()];
+        const n = nodes.length;
+        if (!n) return true;
+        const W = world.w;
+        const H = world.h;
+
+        for (const a of nodes) {
+          a.axf = 0;
+          a.ayf = 0;
+        }
+
+        // repulsion, clamped so it can never explode
+        for (let i = 0; i < n; i++) {
+          for (let j = i + 1; j < n; j++) {
+            const A = nodes[i];
+            const B = nodes[j];
+            let dx = B.x - A.x;
+            let dy = B.y - A.y;
+            let d2 = dx * dx + dy * dy;
+            if (d2 < 1e-6) {
+              const t = tieBreak(i, j);
+              dx = t.x;
+              dy = t.y;
+              d2 = dx * dx + dy * dy;
+            }
+            if (A.dying || B.dying) continue;
+            const d = Math.sqrt(d2);
+            const f = (K.rep * A.q * B.q) / Math.max(d2, K.dmin * K.dmin) / d;
+            A.axf -= dx * f;
+            A.ayf -= dy * f;
+            B.axf += dx * f;
+            B.ayf += dy * f;
+          }
+        }
+
+        // Hooke on real edges only
+        for (const [a, b, k, L] of simEdges) {
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const d = Math.hypot(dx, dy) || 0.01;
+          const f = (k * (d - L)) / d;
+          a.axf += dx * f;
+          a.ayf += dy * f;
+          b.axf -= dx * f;
+          b.ayf -= dy * f;
+        }
+
+        for (const a of nodes) {
+          if (a.kind === 0) {
+            a.axf += K.anch * (a.ax - a.x);
+            a.ayf += K.anch * (a.ay - a.y);
+            continue;
+          }
+          if (a.dying) {
+            /*
+             * The trip home is KINEMATIC, not a force — and that is deliberate.
+             *
+             * Two force attempts both failed, each measured in the browser:
+             *  1. constant pull (0.16 * distance) pinned the node to the velocity cap on frame 1,
+             *     so the flight read as a linear drag at fixed speed;
+             *  2. a ramped pull plus a tangential term did curve nicely, but an attractor with no
+             *     damping conserves energy: the node shot THROUGH the parent (angle flipped
+             *     -43deg -> 135deg), came out the far side and orbited at d 28-39 until the
+             *     150-tick failsafe killed it — it never actually arrived.
+             * A retracting node has exactly one job, so drive it along a path instead: smoothstep
+             * from where it died to the parent, with a tangential swing that peaks mid-flight and
+             * unwinds by the end. It eases out AND in, cannot overshoot, and lands exactly on the
+             * parent, so the arrival test always fires.
+             */
+            const p = sim.get(a.parent);
+            if (p) {
+              if (a.h0x === undefined) {
+                a.h0x = a.x - p.x;
+                a.h0y = a.y - p.y;
+              }
+              const u = Math.min(1, (a.dyingTicks || 0) / K.home);
+              const e = u * u * (3 - 2 * u);
+              const rem = 1 - e;
+              const sw = 0.85 * (a.spin || 1) * Math.sin(Math.PI * e);
+              const cs = Math.cos(sw);
+              const sn = Math.sin(sw);
+              a.x = p.x + (a.h0x * cs - a.h0y * sn) * rem;
+              a.y = p.y + (a.h0x * sn + a.h0y * cs) * rem;
+            }
+            a.vx = 0;
+            a.vy = 0;
+            a.axf = 0;
+            a.ayf = 0;
+            continue;
+          }
+          a.axf += K.grav * (W / 2 - a.x);
+          a.ayf += K.grav * (H / 2 - a.y);
+          const p = sim.get(a.parent);
+          if (!p) continue;
+          const dx = a.x - p.x;
+          const dy = a.y - p.y;
+          const d = Math.hypot(dx, dy);
+          if (d > 1) {
+            // arc-length angular spring — this is what stops the ring rotating forever
+            const f = K.arc * wrapPi(a.ta - Math.atan2(dy, dx)) * d;
+            a.axf += (-dy / d) * f;
+            a.ayf += (dx / d) * f;
+          }
+        }
+
+        // semi-implicit Euler, dt = 1 FRAME (never elapsed ms — variable dt against 1/d² is
+        // exactly how these blow up when a tab stalls)
+        for (const a of nodes) {
+          a.ox = a.x;
+          a.oy = a.y;
+          if (a.pinned) {
+            a.vx = 0;
+            a.vy = 0;
+            continue;
+          }
+          a.vx = (a.vx + a.axf / a.m) * K.damp;
+          a.vy = (a.vy + a.ayf / a.m) * K.damp;
+          let s = Math.hypot(a.vx, a.vy);
+          if (s > K.vmax) {
+            a.vx *= K.vmax / s;
+            a.vy *= K.vmax / s;
+            s = K.vmax;
+          }
+          if (s < K.vsleep) {
+            a.vx = 0;
+            a.vy = 0;
+          }
+          a.x += a.vx;
+          a.y += a.vy;
+        }
+
+        // positional separation — adds no energy, so it cannot explode
+        for (let i = 0; i < n; i++) {
+          for (let j = i + 1; j < n; j++) {
+            const A = nodes[i];
+            const B = nodes[j];
+            if (A.dying || B.dying) continue;
+            const need = A.r + B.r + K.sep;
+            const dx = B.x - A.x;
+            const dy = B.y - A.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 >= need * need || d2 < 1e-9) continue;
+            const d = Math.sqrt(d2);
+            const ov = (need - d) * K.relax;
+            const iA = A.pinned ? 0 : 1 / A.m;
+            const iB = B.pinned ? 0 : 1 / B.m;
+            if (iA + iB === 0) continue;
+            const w = iA / (iA + iB);
+            A.x -= (dx / d) * ov * w;
+            A.y -= (dy / d) * ov * w;
+            B.x += (dx / d) * ov * (1 - w);
+            B.y += (dy / d) * ov * (1 - w);
+          }
+        }
+
+        let maxDisp = 0;
+        for (const a of nodes) {
+          if (!Number.isFinite(a.x) || !Number.isFinite(a.y)) {
+            // NaN sentinel: reseed to the ideal slot rather than leaving a silently missing node
+            const p = sim.get(a.parent);
+            a.x = (p ? p.x : W / 2) + (a.tr || 100) * Math.cos(a.ta || 0);
+            a.y = (p ? p.y : H / 2) + (a.tr || 100) * Math.sin(a.ta || 0);
+            a.vx = 0;
+            a.vy = 0;
+          }
+          let dx = a.x - a.ox;
+          let dy = a.y - a.oy;
+          const m = Math.hypot(dx, dy);
+          if (m > K.dmax) {
+            a.x = a.ox + (dx * K.dmax) / m;
+            a.y = a.oy + (dy * K.dmax) / m;
+          }
+          const lo = 18 + a.r;
+          if (a.x < lo) {
+            a.x = lo;
+            a.vx = 0;
+          }
+          if (a.x > W - lo) {
+            a.x = W - lo;
+            a.vx = 0;
+          }
+          if (a.y < lo) {
+            a.y = lo;
+            a.vy = 0;
+          }
+          if (a.y > H - lo) {
+            a.y = H - lo;
+            a.vy = 0;
+          }
+          maxDisp = Math.max(maxDisp, Math.hypot(a.x - a.ox, a.y - a.oy));
+        }
+
+        // reap arrivals: a retracting child is deleted when it reaches the parent, with a frame
+        // cap so a pathological case can never leave a ghost on the graph
+        let reaped = false;
+        let flying = false;
+        for (const a of nodes) {
+          if (!a.dying) continue;
+          a.dyingTicks = (a.dyingTicks || 0) + frameScale;
+          const p = sim.get(a.parent);
+          const home = p ? Math.hypot(a.x - p.x, a.y - p.y) < p.r * 0.7 : true;
+          if (home || a.dyingTicks > 150) {
+            sim.delete(a.key);
+            reaped = true;
+          } else {
+            flying = true;
+          }
+        }
+        // A retracting node is moved by assignment, not by velocity, so it contributes 0 to
+        // maxDisp — without this the freeze criterion can declare rest and stop the frame loop
+        // with a child stranded in mid-air.
+        if (reaped) simEdges = simEdges.filter((e) => sim.has(e[0].key) && sim.has(e[1].key));
+        if (reaped || flying) {
+          quiet = 0;
+          return false;
+        }
+
+        quiet = maxDisp < K.eps ? quiet + 1 : 0;
+        return quiet >= K.hold;
+      }
+
+      function tick(ts) {
+        raf = 0;
+        // Fixed dt with bounded catch-up: a backgrounded tab throttles rAF to ~1Hz, and
+        // integrating the real elapsed time would fling every node off screen on return.
+        let steps = 1;
+        if (lastFrame && ts - lastFrame > 100) steps = Math.min(4, Math.round((ts - lastFrame) / 16));
+        /*
+         * The force integrator is tuned per FRAME, but the retraction is a timed path, so it must
+         * be told how long a frame actually was: measured at 167Hz in a headless browser the trip
+         * home finished in 0.30s instead of 0.83s, and a 144Hz display would do the same to a
+         * real viewer. When we are catching up with several steps, each step IS one 16.7ms slice,
+         * so the scale is 1.
+         */
+        frameScale = steps > 1 || !lastFrame ? 1 : Math.min(3, Math.max(0.2, (ts - lastFrame) / 16.67));
+        lastFrame = ts;
+        let settled = false;
+        for (let i = 0; i < steps; i++) settled = step();
+        paintPositions();
+        if (!settled || dragging) raf = requestAnimationFrame(tick);
+      }
+
+      // =====================================================================
+      // graph rendering — data visuals and position writing are SEPARATE passes
+      // =====================================================================
+
+      const gRoot = $("#graph");
+      let layers = null;
+      /** The zoom/pan window over world coordinates. The sim always works in world space. */
+      let view = null;
+      let hovered = null;
+
+      function ensureLayers() {
+        if (layers) return layers;
+        const g = (cls) => {
+          const n = svg("g", { class: cls });
+          gRoot.append(n);
+          return n;
+        };
+        layers = { wf: g("l-wf"), edges: g("l-edges"), nodes: g("l-nodes"), caps: g("l-caps") };
+        return layers;
+      }
+
+      function applyView() {
+        if (!view) return;
+        gRoot.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
+      }
+
+      /** Pointer position in world coordinates (accounts for zoom and pan). */
+      function toWorld(ev) {
+        const r = gRoot.getBoundingClientRect();
+        return {
+          x: view.x + ((ev.clientX - r.left) / r.width) * view.w,
+          y: view.y + ((ev.clientY - r.top) / r.height) * view.h,
+        };
+      }
+
+      function buildHub() {
+        const g = svg("g", { class: "node hub", tabindex: "0", role: "treeitem" });
+        const refs = {
+          pulse: svg("circle", { class: "pulsering", r: HUB_R, "stroke-width": 2, "vector-effect": "non-scaling-stroke" }),
+          ring: svg("circle", { class: "ring", r: HUB_R + 4, "stroke-width": 2, "vector-effect": "non-scaling-stroke" }),
+          birth: svg("circle", { class: "birth", r: HUB_R, "stroke-width": 2, "vector-effect": "non-scaling-stroke" }),
+          disc: svg("circle", { class: "disc", r: HUB_R, "stroke-width": 2, "vector-effect": "non-scaling-stroke" }),
+          errarc: svg("path", { class: "errarc", "stroke-width": 3, "vector-effect": "non-scaling-stroke" }),
+          icon: svg("text", { class: "mono", y: -6, style: "font-size:19px" }),
+          surface: svg("text", { class: "surface", y: 14 }),
+          name: svg("text", { class: "hubname", y: -(HUB_R + 16) }),
+          sub: svg("text", { class: "hubsub", y: HUB_R + 20 }),
+          doing: svg("text", { class: "hubdoing", y: HUB_R + 34 }),
+          errcount: svg("text", { class: "errcount", x: HUB_R + 16, y: -(HUB_R - 2) }),
+          title: svg("title"),
+        };
+        g.append(
+          refs.title,
+          refs.pulse,
+          refs.ring,
+          refs.birth,
+          refs.disc,
+          refs.errarc,
+          refs.icon,
+          refs.surface,
+          refs.name,
+          refs.sub,
+          refs.doing,
+          refs.errcount,
+        );
+        return { g, refs, kind: "hub" };
+      }
+
+      function buildKid() {
+        const g = svg("g", { class: "node kid", tabindex: "0", role: "treeitem" });
+        const refs = {
+          pulse: svg("circle", { class: "pulsering", r: 12, "stroke-width": 1.5, "vector-effect": "non-scaling-stroke" }),
+          ring: svg("circle", { class: "ring", r: 15, "stroke-width": 2, "vector-effect": "non-scaling-stroke" }),
+          disc: svg("circle", { class: "disc", r: 12, "stroke-width": 1.5, "vector-effect": "non-scaling-stroke" }),
+          errarc: svg("path", { class: "errarc", "stroke-width": 2.5, "vector-effect": "non-scaling-stroke" }),
+          mono: svg("text", { class: "mono" }),
+          capG: svg("g", { class: "capg" }),
+          cap: svg("text", { class: "cap" }),
+          title: svg("title"),
+        };
+        refs.capG.append(refs.cap);
+        g.append(refs.title, refs.pulse, refs.ring, refs.disc, refs.errarc, refs.mono);
+        return { g, refs, kind: "kid" };
+      }
+
+      function paintHubData(node, a, now) {
+        const { refs, g } = node;
+        const st = a.status.state;
+        g.dataset.state = st;
+        g.classList.toggle("run", st === "tool" || st === "thinking");
+        g.classList.toggle("done", !a.alive);
+        g.style.opacity = a.alive ? "" : "0.5";
+        refs.disc.setAttribute("fill", "var(--card-2)");
+        refs.icon.textContent = STATE_ICON[st] || "•";
+        refs.surface.textContent = (a.entrypoint || "").replace(/^claude-/, "").slice(0, 8).toUpperCase();
+        refs.surface.setAttribute(
+          "fill",
+          a.entrypoint === "claude-desktop" ? "#c07cff" : a.entrypoint === "claude-vscode" ? "#4a9eff" : "var(--fg-faint)",
+        );
+        refs.name.textContent = trunc(a.title || a.name, 26);
+        const sub = a.subTotals || {};
+        // Only what is RUNNING earns a number here (user directive 2026-09-04): `ลูก 0/69` put a
+        // 69 on screen that was almost entirely history, so the one number that mattered — how
+        // many are working right now — was the small half of a fraction. The finished ones are
+        // still all there, one click away in the panel's "sub-agent ที่จบแล้ว" tab.
+        // โทเค็นของ session นี้เอง (ไม่รวมลูก — ยอดของลูกอยู่ในแผง) เป็นยอดสะสมโดยเจตนา ต่างจาก
+        // "ลูก N ตัว" ที่เป็นของตอนนี้: ค่าที่จ่ายแล้วไม่ลด และการเห็นมันตอนนี้คือประโยชน์ทั้งหมด
+        const ownTok = tokTotal(a.tokens);
+        refs.sub.textContent =
+          STATE_TH[st] +
+          (sub.running ? ` · ลูก ${sub.running} ตัว` : "") +
+          (ownTok ? ` · ${fmtTok(ownTok)} tok` : "") +
+          (a.alive ? "" : " · จบแล้ว");
+        const run = (a.status.running || [])[0];
+        if (run) {
+          refs.doing.dataset.base = trunc((run.icon || "🔧") + " " + run.tool + " " + (run.label || ""), 44);
+          refs.doing.dataset.since = run.startedTs || "";
+        } else if ((st === "thinking" || st === "quiet") && a.status.since) {
+          // How long it has been thinking is the useful number here — silence is the normal
+          // signature of a long think, so the clock is the only thing that moves.
+          refs.doing.dataset.base = "💭 คิดอยู่";
+          refs.doing.dataset.since = a.status.since;
+        } else {
+          delete refs.doing.dataset.since;
+          delete refs.doing.dataset.base;
+          // Never repeat the state line above it. Report the last tool this session actually ran —
+          // "what it did last, and how long ago" is exactly what the state word cannot tell you.
+          const lastTool = [...(a.events || [])].reverse().find((e) => e.kind === "tool");
+          refs.doing.textContent = lastTool
+            ? trunc("ล่าสุด " + (lastTool.icon || "🔧") + " " + lastTool.tool + " " + (lastTool.label || ""), 44) +
+              " · " +
+              fmtAgo(lastTool.ts, now)
+            : a.alive
+              ? ""
+              : "ปิดไปแล้ว · ล่าสุด " + fmtAgo(a.lastTs, now);
+        }
+        /*
+         * The error arc is a QUANTITY, so its length has to mean something. A fixed 1.6rad sweep
+         * looked identical for 1 error and for 100 — alarm without information. Scale it against
+         * the session's own tool count so the arc shows the failure RATE, floored so a single
+         * failure is still visible and capped so it can never look like a full ring.
+         */
+        const errs = (a.counts && a.counts.errors) || 0;
+        const toolsRun = (a.counts && a.counts.tools) || 0;
+        if (errs) {
+          const rate = toolsRun ? errs / toolsRun : 1;
+          const sweep = Math.max(0.35, Math.min(2.4, rate * 12));
+          refs.errarc.setAttribute("d", arcPath(0, 0, HUB_R + 9, -Math.PI / 2, -Math.PI / 2 + sweep));
+        } else {
+          refs.errarc.setAttribute("d", "");
+        }
+        refs.errcount.textContent = errs ? String(errs) : "";
+
+        // Ripple the parent each time it spawns a child. A CSS animation only restarts if the
+        // class is actually removed and re-added across a reflow, hence the void read.
+        const n = sim.get(hubKey(a.sessionId));
+        if (n && n.rippleAt && n.rippleAt !== node.lastRipple) {
+          node.lastRipple = n.rippleAt;
+          refs.birth.classList.remove("go");
+          void refs.birth.getBoundingClientRect();
+          refs.birth.classList.add("go");
+          refs.birth.addEventListener("animationend", () => refs.birth.classList.remove("go"), {
+            once: true,
+          });
+        }
+        refs.title.textContent =
+          `${a.title || a.name}\n${STATE_TH[st]}\n${a.entrypoint} · ${a.kind}\n${a.cwd}` +
+          (a.gitBranch ? ` ⑂ ${a.gitBranch}` : "") +
+          tokTip("\n\nโทเค็นของ session เอง", a.tokens) +
+          tokTip("โทเค็นของ sub-agent ทั้งหมด", sub.tokens) +
+          (errs ? `\n\nวงแดง = tool ล้มเหลว ${errs} จาก ${toolsRun} ครั้ง (ของ agent เอง ไม่ใช่ dashboard)` : "");
+      }
+
+      function paintKidData(node, sub, siblings) {
+        const { refs, g } = node;
+        const r = nodeRadius(sub);
+        g.classList.toggle("run", !!sub.running);
+        g.classList.toggle("done", !sub.running);
+        refs.disc.setAttribute("r", r);
+        refs.disc.setAttribute("fill", modelColor(sub.modelTag));
+        refs.pulse.setAttribute("r", r);
+        refs.ring.setAttribute("r", r + 3);
+        refs.ring.setAttribute("stroke-width", sub.running ? 2 : 1);
+        refs.mono.textContent = sub.modelTag || "??";
+        refs.errarc.setAttribute("d", sub.errors ? arcPath(0, 0, r + 7, -Math.PI / 2, -Math.PI / 2 + 1.6) : "");
+
+        const doing = sub.current
+          ? (sub.current.icon || "🔧") + " " + sub.current.tool
+          : sub.lastTool
+            ? "💭 " + sub.lastTool.tool
+            : "💭";
+        const dense = siblings > 26;
+        const capText = dense ? trunc(doing, 16) : trunc(sub.type.replace("workflow-subagent", "wf") + " " + doing, 22);
+        refs.cap.dataset.base = capText;
+        if (sub.running) {
+          refs.cap.dataset.since = (sub.current && sub.current.startedTs) || sub.lastTs || sub.startedTs || "";
+        } else {
+          delete refs.cap.dataset.since;
+          refs.cap.textContent = capText + " · " + fmtDur(sub.durMs);
+        }
+        refs.cap.dataset.r = r;
+        refs.title.textContent =
+          `${sub.type} · ${sub.model || "?"}\n${sub.label || ""}\n` +
+          (sub.current
+            ? `กำลังทำ: ${sub.current.tool} ${sub.current.label || ""}`
+            : sub.lastTool
+              ? `ล่าสุด: ${sub.lastTool.tool} ${sub.lastTool.label || ""}`
+              : "") +
+          `\n${sub.tools} tool${sub.errors ? ` · ${sub.errors} พลาด` : ""}` +
+          tokTip("\nโทเค็น", sub.tokens) +
+          "\nลากได้";
+        g.setAttribute(
+          "aria-label",
+          `${sub.type} ${sub.model} ${sub.label} ${sub.tools} tool ${fmtTok(tokTotal(sub.tokens))} token`,
+        );
+      }
+
+      /** Create/remove SVG for the current sim membership and refresh data visuals. */
+      function paintData(agents, now) {
+        const L = ensureLayers();
+        const seen = new Set();
+
+        for (const n of sim.values()) {
+          seen.add(n.key);
+          let node = nodes.get(n.key);
+          if (!node) {
+            node = n.kind === 0 ? buildHub() : buildKid();
+            node.key = n.key;
+            nodes.set(n.key, node);
+            L.nodes.append(node.g);
+            if (node.refs.capG) L.caps.append(node.refs.capG);
+            if (n.born) {
+              node.g.classList.add("spawn");
+              n.born = false;
+              // drop the class once the keyframes finish, so the DOM never carries a stale
+              // "spawn" marker (it also lets the animation re-trigger if the node is rebuilt)
+              node.g.addEventListener("animationend", () => node.g.classList.remove("spawn"), {
+                once: true,
+              });
+            }
+            wireNode(node, n);
+          }
+          node.g.classList.toggle("dying", !!n.dying);
+          if (n.kind === 0) paintHubData(node, n.data, now);
+          else paintKidData(node, n.data, sim.get(n.parent) ? sim.get(n.parent).degree || 1 : 1);
+
+          const isSel =
+            selected &&
+            ((n.kind === 0 && selected.kind === "hub" && selected.sessionId === n.sessionId) ||
+              (n.kind === 1 && selected.kind === "sub" && selected.agentId === n.data.agentId));
+          node.g.classList.toggle("sel", !!isSel);
+          const dimming = (selected && selected.kind === "sub") || hovered;
+          const related =
+            isSel ||
+            (hovered && (n.key === hovered || n.parent === hovered || (sim.get(hovered) && sim.get(hovered).parent === n.key)));
+          node.g.classList.toggle("dim", !!dimming && !related);
+        }
+
+        for (const [key, node] of nodes) {
+          if (!seen.has(key)) {
+            node.g.remove();
+            if (node.refs.capG) node.refs.capG.remove();
+            nodes.delete(key);
+          }
+        }
+
+        // edges follow sim membership
+        const seenEdge = new Set();
+        for (const [a, b] of simEdges) {
+          const key = b.key + ">" + a.key;
+          seenEdge.add(key);
+          if (!edges.has(key)) {
+            const e = svg("line", { class: "edge", "stroke-width": 1, "vector-effect": "non-scaling-stroke" });
+            edges.set(key, e);
+            L.edges.append(e);
+          }
+          edges.get(key).classList.toggle("run", !!(a.data && a.data.running));
+        }
+        for (const [key, e] of edges) {
+          if (!seenEdge.has(key)) {
+            e.remove();
+            edges.delete(key);
+          }
+        }
+
+        // workflow grouping: a real grouping on disk earns a hull-ish band, but never an
+        // intermediate node (that would imply a parentage the data does not have)
+        const groups = new Map();
+        for (const n of sim.values()) {
+          if (n.kind !== 1 || !n.data.workflowId) continue;
+          const key = n.sessionId + ":" + n.data.workflowId;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(n);
+        }
+        for (const [key, members] of groups) {
+          if (members.length < 2) {
+            if (wfArcs.has(key)) {
+              wfArcs.get(key).remove();
+              wfArcs.delete(key);
+            }
+            continue;
+          }
+          if (!wfArcs.has(key)) {
+            const p = svg("path", { class: "wfarc", "stroke-width": 3, "vector-effect": "non-scaling-stroke" });
+            const t = svg("title");
+            t.textContent = "workflow " + key.split(":")[1];
+            p.append(t);
+            wfArcs.set(key, p);
+            L.wf.append(p);
+          }
+          wfArcs.get(key).__members = members;
+        }
+        for (const [key, p] of wfArcs) {
+          if (!groups.has(key) || groups.get(key).length < 2) {
+            p.remove();
+            wfArcs.delete(key);
+          }
+        }
+      }
+
+      /** Cheap per-frame pass: transforms only. Runs at animation rate. */
+      function paintPositions() {
+        /*
+         * Prune orphans HERE, not only in paintData. A retracting child is reaped by the
+         * simulation the instant it reaches its parent, but paintData only runs on a data frame
+         * (~700ms apart) — so the SVG outlived its sim node and sat frozen at the parent's edge,
+         * measured hanging there for up to 350ms after it had visually landed. That frozen
+         * half-faded disc was the whole reason the retraction did not read as "absorbed".
+         */
+        if (nodes.size > sim.size) {
+          for (const [key, node] of nodes) {
+            if (sim.has(key)) continue;
+            node.g.remove();
+            if (node.refs.capG) node.refs.capG.remove();
+            nodes.delete(key);
+          }
+          for (const [key, e] of edges) {
+            const [hubK, kidK] = key.split(">");
+            if (sim.has(hubK) && sim.has(kidK)) continue;
+            e.remove();
+            edges.delete(key);
+          }
+        }
+        for (const n of sim.values()) {
+          const node = nodes.get(n.key);
+          if (!node) continue;
+          node.g.setAttribute("transform", `translate(${n.x.toFixed(1)} ${n.y.toFixed(1)})`);
+          if (n.kind === 1 && node.refs.capG) {
+            node.refs.capG.setAttribute("visibility", n.dying ? "hidden" : "visible");
+            const p = sim.get(n.parent);
+            const ang = p ? Math.atan2(n.y - p.y, n.x - p.x) : 0;
+            const flip = Math.cos(ang) < 0;
+            const r = Number(node.refs.cap.dataset.r || 12);
+            node.refs.capG.setAttribute(
+              "transform",
+              `translate(${n.x.toFixed(1)} ${n.y.toFixed(1)}) rotate(${(((flip ? ang + Math.PI : ang) * 180) / Math.PI).toFixed(1)})`,
+            );
+            node.refs.cap.setAttribute("x", flip ? -(r + 9) : r + 9);
+            node.refs.cap.setAttribute("y", 3.5);
+            node.refs.cap.setAttribute("text-anchor", flip ? "end" : "start");
+          }
+        }
+        for (const [key, e] of edges) {
+          const [hubK, kidK] = key.split(">");
+          const h = sim.get(hubK);
+          const k = sim.get(kidK);
+          if (!h || !k) continue;
+          const dx = k.x - h.x;
+          const dy = k.y - h.y;
+          const d = Math.hypot(dx, dy) || 1;
+          const ux = dx / d;
+          const uy = dy / d;
+          e.setAttribute("x1", (h.x + ux * (h.r + 6)).toFixed(1));
+          e.setAttribute("y1", (h.y + uy * (h.r + 6)).toFixed(1));
+          e.setAttribute("x2", (k.x - ux * (k.r + 5)).toFixed(1));
+          e.setAttribute("y2", (k.y - uy * (k.r + 5)).toFixed(1));
+        }
+        for (const p of wfArcs.values()) {
+          const ms = p.__members;
+          if (!ms || ms.length < 2) continue;
+          const hub = sim.get(ms[0].parent);
+          if (!hub) continue;
+          // order members around the hub so the band reads as one group, not a scribble
+          const sorted = [...ms].sort(
+            (a, b) => Math.atan2(a.y - hub.y, a.x - hub.x) - Math.atan2(b.y - hub.y, b.x - hub.x),
+          );
+          p.setAttribute(
+            "d",
+            sorted
+              .map((m, i) => {
+                const ang = Math.atan2(m.y - hub.y, m.x - hub.x);
+                const rad = Math.hypot(m.x - hub.x, m.y - hub.y) + m.r + 12;
+                return `${i ? "L" : "M"} ${(hub.x + rad * Math.cos(ang)).toFixed(1)} ${(hub.y + rad * Math.sin(ang)).toFixed(1)}`;
+              })
+              .join(" "),
+          );
+        }
+      }
+
+      // ---------- interaction: drag a node, pan the background, wheel-zoom ----------
+
+      function wireNode(node, n) {
+        node.g.style.cursor = "grab";
+        node.g.addEventListener("pointerdown", (ev) => {
+          ev.stopPropagation();
+          const w = toWorld(ev);
+          dragging = { n, dx: n.x - w.x, dy: n.y - w.y, moved: 0 };
+          n.pinned = true;
+          // Capture is a nicety — it keeps the drag alive if the cursor leaves the disc. It
+          // throws when the pointer is already gone (and for a synthetic event with no live
+          // pointer), and losing capture must never cost us the drag itself.
+          try {
+            node.g.setPointerCapture(ev.pointerId);
+          } catch {}
+          node.g.style.cursor = "grabbing";
+          wake();
+        });
+        node.g.addEventListener("pointermove", (ev) => {
+          if (!dragging || dragging.n !== n) return;
+          const w = toWorld(ev);
+          const nx = w.x + dragging.dx;
+          const ny = w.y + dragging.dy;
+          dragging.moved += Math.hypot(nx - n.x, ny - n.y);
+          n.x = nx;
+          n.y = ny;
+          n.vx = 0;
+          n.vy = 0;
+          wake();
+        });
+        const release = (ev) => {
+          if (!dragging || dragging.n !== n) return;
+          const wasClick = dragging.moved < 4;
+          n.pinned = false;
+          node.g.style.cursor = "grab";
+          try {
+            node.g.releasePointerCapture(ev.pointerId);
+          } catch {
+            /* already released */
+          }
+          dragging = null;
+          wake();
+          // a press that did not move is a click: open the panel
+          if (wasClick) {
+            if (n.kind === 0) selectHub(n.sessionId);
+            else selectSub(n.sessionId, n.data.agentId, n.data);
+          }
+        };
+        node.g.addEventListener("pointerup", release);
+        node.g.addEventListener("pointercancel", release);
+        node.g.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            if (n.kind === 0) selectHub(n.sessionId);
+            else selectSub(n.sessionId, n.data.agentId, n.data);
+          }
+        });
+        node.g.addEventListener("pointerenter", () => {
+          hovered = n.key;
+          if (snapshot.agents) paintData(snapshot.agents, snapshot.nowMs || Date.now());
+        });
+        node.g.addEventListener("pointerleave", () => {
+          if (hovered === n.key) hovered = null;
+          if (snapshot.agents) paintData(snapshot.agents, snapshot.nowMs || Date.now());
+        });
+      }
+
+      let panning = null;
+      gRoot.addEventListener("pointerdown", (ev) => {
+        if (dragging) return;
+        panning = { sx: ev.clientX, sy: ev.clientY, vx: view.x, vy: view.y };
+        gRoot.style.cursor = "grabbing";
+      });
+      gRoot.addEventListener("pointermove", (ev) => {
+        if (!panning) return;
+        const r = gRoot.getBoundingClientRect();
+        view.x = panning.vx - ((ev.clientX - panning.sx) / r.width) * view.w;
+        view.y = panning.vy - ((ev.clientY - panning.sy) / r.height) * view.h;
+        applyView();
+      });
+      const endPan = () => {
+        panning = null;
+        gRoot.style.cursor = "";
+      };
+      gRoot.addEventListener("pointerup", endPan);
+      gRoot.addEventListener("pointerleave", endPan);
+
+      gRoot.addEventListener(
+        "wheel",
+        (ev) => {
+          if (!view) return;
+          ev.preventDefault();
+          // zoom about the cursor: the world point under the pointer stays put
+          const w = toWorld(ev);
+          const scale = ev.deltaY > 0 ? 1.12 : 1 / 1.12;
+          const minW = world.w * 0.25;
+          const maxW = world.w * 3;
+          const nw = Math.max(minW, Math.min(maxW, view.w * scale));
+          const k = nw / view.w;
+          view.w = nw;
+          view.h *= k;
+          view.x = w.x - (w.x - view.x) * k;
+          view.y = w.y - (w.y - view.y) * k;
+          applyView();
+        },
+        { passive: false },
+      );
+
+      $("#zoom-reset").addEventListener("click", () => {
+        view = { x: 0, y: 0, w: world.w, h: world.h };
+        applyView();
+        for (const n of sim.values()) n.pinned = false;
+        wake();
+      });
+
+      // =====================================================================
+      // side panel
+      // =====================================================================
+
+      function currentAgent() {
+        if (!selected) return null;
+        return (snapshot.agents || []).find((a) => a.sessionId === selected.sessionId) || null;
+      }
+
+      function openPanel() {
+        $("#main").classList.add("panel-open");
+      }
+      function closePanel() {
+        selected = null;
+        $("#main").classList.remove("panel-open");
+        render();
+      }
+
+      function selectHub(sessionId, tab) {
+        selected = { kind: "hub", sessionId };
+        panelTab = tab || "feed";
+        feedSeq = 0;
+        feedStick = true;
+        openPanel();
+        render();
+      }
+      function selectSub(sessionId, agentId, sub) {
+        selected = { kind: "sub", sessionId, agentId, label: sub ? sub.type + " · " + sub.label : agentId };
+        panelTab = "tools";
+        openPanel();
+        render();
+        loadAgentDetail(sessionId, agentId, "all");
+      }
+
+      function renderPanel(now) {
+        const a = currentAgent();
+        if (!selected || !a) return;
+        const isHub = selected.kind === "hub";
+        $("#p-title").textContent = isHub ? a.title || a.name : selected.label;
+
+        const tabs = isHub
+          ? [
+              ["feed", "บทสนทนา"],
+              ["waste", "💸 error กิน token"],
+              ["meta", "รายละเอียด session"],
+              ["subs", "sub-agent ที่จบแล้ว"],
+              ["tools", "tool / error / deny"],
+            ]
+          : [
+              ["tools", "tool ทั้งหมด"],
+              ["bad", "error / deny"],
+              ["meta", "รายละเอียด"],
+            ];
+        const tabBox = $("#p-tabs");
+        if (tabBox.dataset.for !== selected.kind + selected.sessionId + (selected.agentId || "")) {
+          tabBox.dataset.for = selected.kind + selected.sessionId + (selected.agentId || "");
+          tabBox.textContent = "";
+          for (const [id, label] of tabs) {
+            const b = el("button", null, label);
+            b.dataset.tab = id;
+            b.addEventListener("click", () => {
+              panelTab = id;
+              if (!isHub) loadAgentDetail(selected.sessionId, selected.agentId, id === "bad" ? "bad" : "all");
+              else if (id === "tools") loadAgentDetail(selected.sessionId, "", "all");
+              render();
+            });
+            tabBox.append(b);
+          }
+        }
+        // "wasteDetail" คือมุมมองย่อยของแท็บ waste — ให้ปุ่ม waste ยังเป็นปุ่มที่ถูกเลือกอยู่
+        const activeTab = panelTab === "wasteDetail" ? "waste" : panelTab;
+        for (const b of tabBox.children) b.setAttribute("aria-pressed", String(b.dataset.tab === activeTab));
+
+        if (isHub) {
+          $("#p-meta").textContent =
+            (a.model || "?") + (a.effort ? " · " + a.effort : "") + " · " + STATE_TH[a.status.state];
+        }
+
+        const body = $("#p-body");
+        if (panelTab === "feed") renderFeed(body, a, now);
+        else if (panelTab === "waste") renderWaste(body, a);
+        else if (panelTab === "meta") renderMeta(body, a, now);
+        else if (panelTab === "subs") renderFinished(body, a);
+        // 'tools' / 'bad' are filled asynchronously by loadAgentDetail
+      }
+
+      /**
+       * The surface badge, as the VALUE of the `surface` row.
+       *
+       * It used to be inserted with `dl.after(tag)` — a sibling of the <dl>, while the refresh
+       * only cleared the <dl>'s own children. So every snapshot (one per 700ms) left another
+       * badge behind: the row grew without limit and pushed a horizontal scrollbar onto the
+       * panel. Living inside the <dl> means the same clear that rebuilds the rows removes it,
+       * and the badge now sits next to the label it describes.
+       */
+      function surfaceTag(a) {
+        const t = el("span", "tag", (a.entrypoint || "?").replace(/^claude-/, ""));
+        t.dataset.surface = a.entrypoint || "";
+        return t;
+      }
+
+      function renderMeta(body, a, now) {
+        if (body.dataset.mode !== "meta") {
+          body.textContent = "";
+          body.dataset.mode = "meta";
+        }
+        const sub = selected.kind === "sub" ? (a.subagents || []).find((s) => s.agentId === selected.agentId) : null;
+        const rows = sub
+          ? [
+              ["agentId", sub.agentId],
+              ["ชนิด", sub.type],
+              ["model", sub.model || "—"],
+              ["ชื่องาน", sub.label || "—"],
+              ["ที่มาของชื่อ", sub.labelSource || "—"],
+              // "จบแล้ว" กับ "ล้มเหลว" ไม่ใช่เรื่องเดียวกัน — `outcome` มาจาก terminal type ที่
+              // journal เขียนเอง (`result` / `failed` / …) ไม่ใช่การเดาจากจำนวน error
+              ["สถานะ", subStateTh(sub)],
+              ["ตัดสินจาก", sub.runningSource || "—"],
+              ["tool", String(sub.tools)],
+              ["พลาด", String(sub.errors)],
+              ...tokRows(sub.tokens),
+              ["เริ่ม", sub.startedTs || "—"],
+              ["ล่าสุด", fmtAgo(sub.lastTs, now)],
+              ["ใช้เวลา", fmtDur(sub.durMs)],
+              ["workflow", sub.workflowId || "—"],
+              ["ความลึก", String(sub.depth || 1) + (sub.depth > 1 ? " (ลูกของ sub-agent ตัวอื่น)" : " (สายหลักเรียกเอง)")],
+              ...(sub.parentAgentId
+                ? [
+                    [
+                      "พ่อ",
+                      (() => {
+                        const par = (a.subagents || []).find((x) => x.agentId === sub.parentAgentId);
+                        return par
+                          ? par.type + " · " + (par.label || par.agentId)
+                          : sub.parentAgentId + " (ไม่ได้ส่งมาในเฟรมนี้)";
+                      })(),
+                    ],
+                  ]
+                : []),
+              ["งานที่ได้รับ", sub.task || "—"],
+              ["คำตอบ", sub.answer || "—"],
+            ]
+          : [
+              ["session", a.sessionId],
+              ["ชื่อ", a.name],
+              ["หัวข้อ", a.title || "—"],
+              ["surface", surfaceTag(a)],
+              ["ชนิด", a.kind],
+              ["ยังอยู่", a.alive ? "ใช่" : "จบแล้ว"],
+              ["สถานะ", STATE_TH[a.status.state]],
+              // what PROVED the turn was over — "—" means nothing has, so the state is a reading
+              // of silence rather than a fact (see README: สถานะที่มันบอก)
+              ["จบเทิร์นด้วย", a.status.endedBy || "—"],
+              ["cwd", a.cwd],
+              ["branch", a.gitBranch || "—"],
+              ["model", a.model || "—"],
+              ["effort", a.effort || "—"],
+              ["pid", String(a.pid)],
+              ["version", a.version || "—"],
+              ["เริ่ม", a.startedAt ? new Date(a.startedAt).toLocaleString() : "—"],
+              ["ล่าสุด", fmtAgo(a.lastTs, now)],
+              ["tool / error / deny", `${a.counts.tools} / ${a.counts.errors} / ${a.counts.denials}`],
+              ...tokRows(a.tokens),
+              // ยอดของลูกแยกจากยอดของแม่โดยเจตนา — การรวมกันจะกลบว่าครึ่งไหนของต้นทุนมาจากการ delegate
+              ...(a.subTotals && tokTotal(a.subTotals.tokens)
+                ? tokRows(a.subTotals.tokens, "โทเค็นของ sub-agent")
+                : []),
+              ...(a.subTotals && a.subTotals.truncated
+                ? [["⚠️ sub-agent เกินเพดาน", `${a.subTotals.onDisk} ตัวบนดิสก์ · ไม่ได้อ่าน ${a.subTotals.truncated} ตัว`]]
+                : []),
+              ["transcript", a.hasTranscript ? "พบ" : "ไม่พบ"],
+            ];
+        let dl = body.querySelector(".meta");
+        if (!dl) {
+          dl = el("dl", "meta");
+          body.append(dl);
+        }
+        dl.textContent = "";
+        for (const [k, v] of rows) {
+          const dd = el("dd");
+          // a row value may be an element (the surface badge) — see surfaceTag
+          if (v instanceof Node) dd.append(v);
+          else dd.textContent = String(v);
+          dl.append(el("dt", null, k), dd);
+        }
+      }
+
+      function renderEvent(ev, fresh, sessionId) {
+        const row = el("div", "ev " + ev.kind + (fresh ? " fresh" : ""));
+        const drill = () => {
+          if (!ev.hasDetail) return;
+          row.style.cursor = "pointer";
+          row.title = "กดดูรายละเอียด";
+          row.addEventListener("click", () => {
+            panelTab = "tools";
+            loadAgentDetail(sessionId, "", ev.kind === "tool" ? "tool" : "bad");
+          });
+        };
+        if (ev.kind === "tool") {
+          const chip = el("div", "chip " + (!ev.done ? "run" : ev.error ? "fail" : ""));
+          chip.append(
+            el("span", "t", (ev.icon || "🔧") + " " + ev.tool),
+            el("span", "l", ev.label || ""),
+            el("span", "d", ev.done ? fmtDur(ev.durMs) : ""),
+          );
+          row.append(chip);
+          drill();
+          return row;
+        }
+        row.append(el("span", "av", EV_AVATAR[ev.kind] || "•"));
+        const bubble = el("div", "bubble");
+        if (ev.kind === "denied" || ev.kind === "blocked") {
+          if (ev.rule) bubble.append(el("span", "badge warn", ev.rule), document.createTextNode(" "));
+          if (ev.denyLabel) bubble.append(el("span", "badge calm", ev.denyLabel), document.createTextNode(" "));
+        }
+        // error: ติดป้ายว่าเป็นความล้มเหลว **ชนิดไหน** และ **ราคาเท่าไหร่** ไว้ที่ตัวมันเลย
+        // เพราะ "มี error" อ่านแล้วทำอะไรต่อไม่ได้ แต่ "path ผิด เสีย 184K" อ่านแล้วรู้ว่าต้องแก้อะไร
+        if (ev.kind === "error") {
+          if (ev.errorLabel) bubble.append(el("span", "badge bad", ev.errorLabel), document.createTextNode(" "));
+          if (ev.wastedTokens) {
+            bubble.append(el("span", "badge warn", "เสีย " + fmtTok(ev.wastedTokens) + " tok"), document.createTextNode(" "));
+          }
+        }
+        bubble.append(document.createTextNode(ev.text || ""));
+        row.append(bubble);
+        if (ev.kind !== "prompt" && ev.kind !== "say" && ev.kind !== "thinking") drill();
+        return row;
+      }
+
+      function renderFeed(body, a, now) {
+        let feed = body.querySelector(".feed");
+        if (body.dataset.mode !== "feed") {
+          body.textContent = "";
+          body.dataset.mode = "feed";
+          feed = el("div", "feed");
+          body.append(feed);
+          feedSeq = 0;
+          feedStick = true;
+          body.addEventListener("scroll", () => {
+            feedStick = body.scrollHeight - body.scrollTop - body.clientHeight < 50;
+          });
+        }
+        let appended = false;
+        for (const ev of a.events || []) {
+          if (ev.i <= feedSeq) continue;
+          feed.append(renderEvent(ev, feedSeq > 0, a.sessionId));
+          feedSeq = ev.i;
+          appended = true;
+        }
+        while (feed.children.length > 90) feed.firstChild.remove();
+        if (appended && feedStick) body.scrollTop = body.scrollHeight;
+      }
+
+      /*
+       * แท็บ "💸 error กิน token" — ตอบสองคำถามที่ตัวเลข `error: 17` ตอบไม่ได้:
+       * **เผาโทเค็นไปกับความล้มเหลวแบบไหน** และ **แก้ยังไง**
+       *
+       * เรียงตามโทเค็นที่เสีย ไม่ใช่ตามจำนวนครั้ง — เพราะราคาของ error หนึ่งตัวคือ *ขนาด context
+       * ตอนนั้น* ไม่ใช่ความหนักของความผิด ⇒ error 1 ครั้งใน session ที่บวมแล้วแพงกว่า error 10 ครั้ง
+       * ใน session ที่เพิ่งเริ่ม การเรียงตามจำนวนครั้งจะชี้ไปผิดที่เสมอ
+       * (วัดจากเครื่องนี้: เฉลี่ย ~102K/ครั้งในฝั่ง sub-agent แต่ ~490K/ครั้งในสายหลัก)
+       *
+       * ทุกแถวมีบรรทัด `⇒ วิธีแก้` เพราะหมวดที่ไม่มีทางแก้ก็เป็นแค่การบ่น
+       */
+      function renderWaste(body, a) {
+        const rows = a.errorStats || [];
+        const all = tokTotal(a.tokens) + tokTotal((a.subTotals || {}).tokens);
+        const wasted = rows.reduce((n, r) => n + r.tokens, 0);
+        const times = rows.reduce((n, r) => n + r.n, 0);
+        const sig = all + "|" + rows.map((r) => r.id + ":" + r.n + ":" + r.tokens).join("|");
+        if (body.dataset.mode === "waste" && body.dataset.sig === sig) return;
+        const keep = body.dataset.mode === "waste" ? body.scrollTop : 0;
+        body.textContent = "";
+        body.dataset.mode = "waste";
+        body.dataset.sig = sig;
+
+        if (!rows.length) {
+          body.append(el("div", "p-note", "ยังไม่มี error ในเซสชันนี้ — ไม่มีโทเค็นที่เสียไปกับการแก้ตัว 🎉"));
+          return;
+        }
+
+        body.append(
+          el(
+            "div",
+            "p-note",
+            `เสียไปกับ error ${fmtTok(wasted)} จาก ${fmtTok(all)} ที่ใช้ทั้งหมด` +
+              (all ? ` (${((wasted / all) * 100).toFixed(1)}%)` : "") +
+              ` · ${times} ครั้ง · เฉลี่ย ${fmtTok(Math.round(wasted / Math.max(1, times)))}/ครั้ง` +
+              " — นับรวมของ session เองกับของ sub-agent ทุกตัว",
+          ),
+        );
+
+        const top = rows[0].tokens || 1;
+        for (const r of rows) {
+          const row = el("div", "wrow");
+          row.title = "กดดูรายการ error / deny จริง";
+          const top1 = el("div", "top");
+          top1.append(
+            el("span", "amt", fmtTok(r.tokens)),
+            el("span", "cnt", "× " + r.n + " ครั้ง · " + fmtTok(Math.round(r.tokens / Math.max(1, r.n))) + "/ครั้ง"),
+            el("span", "lbl", r.label || r.id),
+          );
+          const share = el("div", "share");
+          const fill = el("i");
+          // เทียบกับหมวดที่แพงสุด ไม่ใช่กับยอดรวม — เพื่อให้เห็นลำดับความสำคัญได้จากความยาวแถบ
+          fill.style.width = Math.max(2, Math.round((r.tokens / top) * 100)) + "%";
+          share.append(fill);
+          row.append(top1, share);
+          if (r.fix && r.fix !== "—") row.append(el("div", "fix", "⇒ " + r.fix));
+          row.addEventListener("click", () => {
+            // เข้าโหมดรายละเอียด: ตั้ง panelTab เป็นค่าที่ renderPanel ไม่มี branch รองรับ เพื่อให้
+            // snapshot ทุก 700ms ไม่มาวาดตารางทับ (แบบเดียวกับแท็บ tools/bad ที่โหลดแบบ async)
+            panelTab = "wasteDetail";
+            loadWasteDetail(a.sessionId, r.id, r.label);
+          });
+          body.append(row);
+        }
+        body.scrollTop = keep;
+      }
+
+      function renderFinished(body, a) {
+        // DFS ของต้นไม้ แล้วค่อยกรองเอาตัวที่จบ — ทำให้ลูกยังอยู่ใต้พ่อของมันในลิสต์
+        const subs = treeOrder(a.subagents || []).filter((s) => !s.running);
+        const st = a.subTotals || {};
+        /*
+         * Rebuild ONLY when the list actually changed. renderPanel runs on every snapshot
+         * (~700ms), and a blind `textContent = ""` here threw away the scroll position that
+         * often — so a 24-row history could not be read past the first screenful. Same bug the
+         * chat feed had. The signature covers what is rendered, so a tool count ticking up on a
+         * row still refreshes it.
+         */
+        const sig =
+          (st.done || 0) +
+          "|" +
+          (st.failed || 0) +
+          "|" +
+          subs.map((s) => `${s.agentId}:${s.depth || 1}:${s.tools}:${s.errors}:${s.outcome || ""}`).join(",");
+        if (body.dataset.mode === "subs" && body.dataset.sig === sig) return;
+        const keepScroll = body.dataset.mode === "subs" ? body.scrollTop : 0;
+        body.textContent = "";
+        body.dataset.mode = "subs";
+        body.dataset.sig = sig;
+        body.append(
+          el(
+            "div",
+            "p-note",
+            // "จบแล้ว N ตัว" เฉย ๆ ทำให้รอบที่ล้มเหลวเกือบทั้งรอบดูเหมือนรอบที่สำเร็จ — วัดได้ว่ามี
+            // workflow ที่ล้ม 80 จาก 111 ตัว ⇒ ต้องแยกจำนวนที่ล้มเหลวออกมาให้เห็นตรงหัวรายการ
+            `จบแล้ว ${st.done || 0} ตัว` +
+              (st.failed ? ` · ⛔ ล้มเหลว ${st.failed} ตัว` : "") +
+              (subs.length < (st.done || 0) ? ` (แสดง ${subs.length} ตัวล่าสุด — server จำกัดไว้)` : ""),
+          ),
+        );
+        if (!subs.length) {
+          body.append(el("div", "p-note", "ยังไม่มีตัวที่จบ"));
+          return;
+        }
+        for (const s of subs) {
+          const row = el("div", "srow");
+          const d = s.depth || 1;
+          // เยื้องตามความลึก + ขีดต่อให้เห็นว่าเป็นลูกของแถวที่อยู่เหนือขึ้นไป
+          if (d > 1) row.style.paddingLeft = (d - 1) * 16 + "px";
+          const dot = el("span", "mdot");
+          dot.style.background = modelColor(s.modelTag);
+          dot.title = "model " + (s.model || "?");
+          row.append(dot);
+          if (d > 1) {
+            const tw = el("span", "tw", "└");
+            tw.title = "ลูกของ sub-agent ตัวหนึ่ง (ชั้น " + d + ")";
+            row.append(tw);
+          }
+          row.append(
+            el("span", "ty", s.type),
+            el("span", "l", s.answer || s.label || s.task || ""),
+            el(
+              "span",
+              "d",
+              `${s.tools} tool · ${fmtDur(s.durMs)}` + (tokTotal(s.tokens) ? ` · ${fmtTok(tokTotal(s.tokens))} tok` : ""),
+            ),
+          );
+          if (s.errors) row.append(el("span", "e", s.errors + " พลาด"));
+          row.addEventListener("click", () => selectSub(a.sessionId, s.agentId, s));
+          row.title = "กดดู tool ทั้งหมดของตัวนี้";
+          body.append(row);
+        }
+        body.scrollTop = keepScroll;
+      }
+
+      // ---------- drill-down: tool / error / deny detail from /api/agent ----------
+
+      function kv(label, text, cls) {
+        const wrap = el("div", "kv");
+        wrap.append(el("div", "k", label));
+        const pre = el("pre", cls || null);
+        pre.textContent = text;
+        wrap.append(pre);
+        return wrap;
+      }
+
+      function renderPatch(hunks) {
+        const wrap = el("div", "kv");
+        wrap.append(el("div", "k", "diff"));
+        const pre = el("pre", "patch");
+        for (const h of hunks) {
+          pre.append(el("span", "hdr", `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@\n`));
+          for (const line of h.lines || []) {
+            const cls = line[0] === "+" ? "add" : line[0] === "-" ? "del" : null;
+            pre.append(el("span", cls, line + "\n"));
+          }
+        }
+        wrap.append(pre);
+        return wrap;
+      }
+
+      function buildToolRow(ev) {
+        const d = ev.detail || {};
+        const failed = ev.kind === "error" || (d.result && d.result.failed);
+        const denied = ev.kind === "denied" || ev.kind === "blocked";
+        const running = ev.kind === "tool" && !ev.done;
+        const row = el("div", "trow" + (denied ? " deny" : failed ? " fail" : running ? " run" : ""));
+        const line = el("div", "trow-line");
+        const title =
+          ev.kind === "tool"
+            ? (ev.icon || "🔧") + " " + ev.tool
+            : denied
+              ? "🚫 " + (ev.denyLabel || "ถูกบล็อก")
+              : "❌ " + (ev.tool || "error");
+        line.append(el("span", "t", title), el("span", "l", ev.label || ev.text || ""));
+        if (ev.rule) line.append(el("span", "badge warn", ev.rule));
+        if (ev.exitCode != null) {
+          line.append(el("span", "badge bad", "exit " + ev.exitCode + (ev.exitNote ? " · " + ev.exitNote : "")));
+        }
+        if (running) line.append(el("span", "badge calm", "กำลังทำ"));
+        line.append(el("span", "d", ev.done ? fmtDur(ev.durMs) : ""));
+        row.append(line);
+
+        const body = el("div", "trow-body");
+        for (const r of d.input || []) {
+          if (r.kind === "blob") {
+            const box = kv(r.key, r.preview + "\n… (ตัดไว้)", "blob");
+            box.querySelector(".k").append(el("span", "sz", `${r.bytes.toLocaleString()} B · ${r.lines} บรรทัด`));
+            body.append(box);
+          } else {
+            body.append(kv(r.key, r.text || ""));
+          }
+        }
+        if (d.result) {
+          if (d.result.patch) body.append(renderPatch(d.result.patch));
+          if (d.result.text) {
+            const box = kv(d.result.failed ? "error" : "result", d.result.text, d.result.failed ? "err" : null);
+            box.querySelector(".k").append(el("span", "sz", `${(d.result.bytes || 0).toLocaleString()} B`));
+            body.append(box);
+          }
+          if (d.result.persisted) body.append(kv("saved output", d.result.persisted.path));
+        }
+        if (d.reason) body.append(kv(denied ? "เหตุที่ถูกบล็อก" : "error", d.reason, denied ? "deny" : "err"));
+        if (d.deniedTool) body.append(kv("tool ที่ถูกบล็อก", d.deniedTool.tool + " — " + (d.deniedTool.label || "")));
+        if (d.command) body.append(kv("hook", d.command));
+        if (d.skill) body.append(kv("skill", d.skill));
+        if (d.mcpServer) body.append(kv("mcp", d.mcpServer + " · " + (d.mcpTool || "")));
+        if (!body.children.length) body.append(el("div", "p-note", "ไม่มีรายละเอียดเพิ่มเติม"));
+        row.append(body);
+        line.addEventListener("click", () => row.classList.toggle("open"));
+        return row;
+      }
+
+      let detailToken = 0;
+      /**
+       * กด 1 หมวดในแท็บ "error กิน token" → เห็น error จริงของหมวดนั้น
+       *
+       * ดึงจาก `errorLog` ฝั่ง server (ไม่ใช่จาก event feed) เพราะ feed มีแค่ 256KB ท้ายไฟล์
+       * ในขณะที่ยอดในตารางนับจากทั้งไฟล์ — ถ้าอ่านจาก feed ตัวเลขกับรายการจะไม่ตรงกัน
+       * และของ session จะรวม error ของ sub-agent ทุกตัวมาด้วย (ตรงกับที่ยอดในตารางรวมไว้)
+       */
+      async function loadWasteDetail(sessionId, kindId, label) {
+        const body = $("#p-body");
+        const token = ++detailToken;
+        body.textContent = "";
+        body.dataset.mode = "waste-detail";
+        body.dataset.sig = "";
+        body.append(el("div", "p-note", "กำลังโหลด…"));
+        if (sessionId === "fixture-session") {
+          body.textContent = "";
+          body.append(el("div", "p-note", "นี่คือข้อมูลทดสอบ (?fixture) — ไม่มี transcript จริงให้เจาะดู"));
+          return;
+        }
+        let data;
+        try {
+          data = await fetch("/api/agent?s=" + encodeURIComponent(sessionId)).then((r) => r.json());
+        } catch (err) {
+          if (token === detailToken) {
+            body.textContent = "";
+            body.append(el("div", "p-note", "โหลดไม่ได้: " + err));
+          }
+          return;
+        }
+        if (token !== detailToken) return;
+        body.textContent = "";
+
+        const back = el("button", "p-back", "← กลับไปตารางหมวด");
+        back.type = "button";
+        back.addEventListener("click", () => {
+          panelTab = "waste";
+          renderPanel(Date.now());
+        });
+        body.append(back);
+
+        const all = data.errorLog || [];
+        const keep = all.filter((e) => e.kind === kindId);
+        body.append(
+          el(
+            "div",
+            "p-note",
+            label + " — " + keep.length + " รายการ" + (all.length > keep.length ? " (จากทั้งหมด " + all.length + ")" : ""),
+          ),
+        );
+        if (!keep.length) {
+          body.append(
+            el(
+              "div",
+              "p-note",
+              "ไม่มีรายละเอียดของหมวดนี้เก็บไว้ — errorLog เก็บ " +
+                "ย้อนหลังจำกัด (80 รายการต่อ transcript) ยอดในตารางจึงมากกว่าได้",
+            ),
+          );
+          return;
+        }
+        for (const e of keep) {
+          const row = el("div", "wrow");
+          row.style.cursor = "default";
+          const top = el("div", "top");
+          top.append(
+            el("span", "amt", e.wasted ? fmtTok(e.wasted) : "—"),
+            el("span", "cnt", (e.tool || "?") + (e.from && e.from !== "session" ? " · " + e.from : "")),
+            el("span", "lbl", e.ts ? new Date(e.ts).toLocaleString() : ""),
+          );
+          row.append(top);
+          if (e.cmd) row.append(el("div", "etext cmd", "$ " + e.cmd));
+          if (e.text) row.append(el("div", "etext", e.text));
+          if (e.fix && e.fix !== "—") row.append(el("div", "fix", "⇒ " + e.fix));
+          body.append(row);
+        }
+      }
+
+      async function loadAgentDetail(sessionId, agentId, filter) {
+        const body = $("#p-body");
+        const token = ++detailToken;
+        body.textContent = "";
+        body.dataset.mode = "detail";
+        body.append(el("div", "p-note", "กำลังโหลด…"));
+        // A fixture session has no transcript on disk, so firing the request would only log a
+        // doomed 404. Render sample tool/error/deny rows from the same fixture events instead.
+        if (sessionId === "fixture-session") {
+          body.textContent = "";
+          const fx = currentAgent();
+          const evs = ((fx && fx.events) || []).filter((e) =>
+            filter === "tool"
+              ? e.kind === "tool"
+              : filter === "bad"
+                ? e.kind === "error" || e.kind === "denied" || e.kind === "blocked"
+                : e.kind === "tool" || e.kind === "error" || e.kind === "denied" || e.kind === "blocked",
+          );
+          body.append(
+            el("div", "p-note", "นี่คือข้อมูลทดสอบ (?fixture) — ตัวอย่างด้านล่างเป็นข้อมูลจำลอง ไม่ใช่ transcript จริง"),
+          );
+          if (!evs.length) {
+            body.append(el("div", "p-note", "ไม่มีรายการในหมวดนี้"));
+            return;
+          }
+          for (const ev of [...evs].reverse()) body.append(buildToolRow(ev));
+          return;
+        }
+        let data;
+        try {
+          const qs = "?s=" + encodeURIComponent(sessionId) + (agentId ? "&a=" + encodeURIComponent(agentId) : "");
+          data = await fetch("/api/agent" + qs).then((r) => r.json());
+        } catch (err) {
+          if (token === detailToken) {
+            body.textContent = "";
+            body.append(el("div", "p-note", "โหลดไม่ได้: " + err));
+          }
+          return;
+        }
+        if (token !== detailToken) return;
+        body.textContent = "";
+        if (data.error) {
+          body.append(el("div", "p-note", data.error));
+          return;
+        }
+        if (agentId) {
+          $("#p-meta").textContent =
+            (data.model || "?") + " · " + data.counts.tools + " tool" + (data.counts.errors ? ` · ${data.counts.errors} พลาด` : "");
+        }
+        const keep = data.events.filter((e) =>
+          filter === "tool"
+            ? e.kind === "tool"
+            : filter === "bad"
+              ? e.kind === "error" || e.kind === "denied" || e.kind === "blocked"
+              : true,
+        );
+        if (!keep.length) {
+          body.append(el("div", "p-note", "ไม่มีรายการในหมวดนี้"));
+          return;
+        }
+        for (const ev of [...keep].reverse()) body.append(buildToolRow(ev));
+      }
+
+      // =====================================================================
+      // alerting
+      // =====================================================================
+
+      let audioCtx = null;
+      function beep() {
+        if (!$("#beep").checked) return;
+        try {
+          audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sine";
+          osc.frequency.value = 880;
+          gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.14, audioCtx.currentTime + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.32);
+          osc.connect(gain).connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.34);
+        } catch {
+          /* audio is optional */
+        }
+      }
+
+      // =====================================================================
+      // render
+      // =====================================================================
+
+      function render() {
+        const now = snapshot.nowMs || Date.now();
+        renderPills(snapshot.totals || {});
+        /*
+         * ตรวจ "server เก่า" จาก `totals.tokens` — เป็นฟิลด์ที่มีเฉพาะ server รุ่นที่รู้จักโทเค็น
+         * และมันมาเสมอเมื่อ server ใหม่ (ต่างจาก `usage` ที่เป็น null ได้ถ้าอ่าน `~/.claude.json`
+         * ไม่ผ่าน) ⇒ แยก "server เก่า" ออกจาก "อ่านไฟล์โควตาไม่ได้" ได้จริง ไม่ใช่เดา
+         */
+        const staleServer = !(snapshot.totals && snapshot.totals.tokens);
+        /*
+         * ส่ง `now` (ที่มี fallback เป็น Date.now()) ไม่ใช่ `snapshot.nowMs` ดิบ — ของเดิมส่งดิบ
+         * ทำให้ถ้า payload ไม่มี `nowMs` ทุกการคำนวณอายุ/นับถอยหลังกลายเป็น NaN เงียบ ๆ
+         */
+        renderQuota(snapshot.usage, now, staleServer);
+
+        const needle = filterText.trim().toLowerCase();
+        const agents = (snapshot.agents || []).filter(
+          (a) =>
+            !needle ||
+            (a.name || "").toLowerCase().includes(needle) ||
+            (a.title || "").toLowerCase().includes(needle) ||
+            (a.cwd || "").toLowerCase().includes(needle) ||
+            (a.entrypoint || "").toLowerCase().includes(needle),
+        );
+
+        renderBand(agents);
+
+        // graph: reconcile the simulation, refresh data visuals, then let the loop move things.
+        // Positions are NEVER read from the snapshot — that is what keeps a settled graph still.
+        const rect = $("#stage").getBoundingClientRect();
+        const W = Math.max(320, rect.width);
+        const H = Math.max(260, rect.height);
+        if (!view) {
+          view = { x: 0, y: 0, w: W, h: H };
+          applyView();
+        }
+        ensureLayers();
+        syncSim(agents, W, H);
+        paintData(agents, now);
+        paintPositions();
+        $("#stage").classList.toggle("is-empty", !agents.length);
+
+        renderPanel(now);
+
+        // Alerting scans EVERY agent, not the filtered set — a filter hides a card, it must not
+        // silence the agent that is waiting on you.
+        for (const a of snapshot.agents || []) {
+          if (a.status.state === "waiting" && !wasWaiting.has(a.sessionId)) {
+            wasWaiting.add(a.sessionId);
+            beep();
+          } else if (a.status.state !== "waiting") {
+            wasWaiting.delete(a.sessionId);
+          }
+        }
+      }
+
+      // live clocks — independent of everything else, so a still graph still ticks
+      setInterval(() => {
+        const now = Date.now();
+        for (const node of document.querySelectorAll("[data-since]")) {
+          const since = node.dataset.since;
+          if (!since) continue;
+          const txt = fmtDur(now - Date.parse(since));
+          if (node.tagName === "text") {
+            // SVG captions carry their label plus the clock
+            const base = node.dataset.base || node.textContent.replace(/\s+·\s+[\d.]+\w+$/, "");
+            node.dataset.base = base;
+            node.textContent = base + " · " + txt;
+          } else {
+            node.textContent = txt;
+          }
+        }
+      }, 200);
+
+      $("#filter").addEventListener("input", (e) => {
+        filterText = e.target.value;
+        render();
+      });
+      $("#p-close").addEventListener("click", closePanel);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && selected) closePanel();
+      });
+      let resizeTimer = null;
+      window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(render, 120);
+      });
+
+      // =====================================================================
+      // data in
+      // =====================================================================
+
+      /** ?fixture=N renders N synthetic running sub-agents so density can be checked without
+       *  waiting for a real fan-out. Goes through the same ingest path as live data. */
+      function fixture(n) {
+        const models = ["HA", "OP", "SO", "FA"];
+        const finishedFiles = [
+          "src/components/Button.tsx",
+          "src/utils/format.ts",
+          "src/api/client.ts",
+          "src/hooks/useDebounce.ts",
+        ];
+        const subs = Array.from({ length: n }, (_, i) => {
+          const errors = i % 9 === 0 ? 1 + (i % 3) : 0;
+          // fixture: every 4th sub-agent is "finished" so the "sub-agent ที่จบแล้ว" tab
+          // (renderFinished, filters on !s.running) has rows to show.
+          const running = i % 4 !== 0;
+          const file = finishedFiles[i % finishedFiles.length];
+          const answer = running
+            ? ""
+            : errors
+              ? `Patched ${file} after a couple of retries — ${errors} tool call${errors > 1 ? "s" : ""} needed a redo, tests pass now.`
+              : `Reviewed ${file} and confirmed it matches the expected behavior — no changes needed.`;
+          return {
+            agentId: "fx" + String(i).padStart(3, "0"),
+            workflowId: i % 7 === 0 ? "wf_demo" : null,
+            type: i % 5 === 0 ? "workflow-subagent" : "scout",
+            label: "งานทดสอบหมายเลข " + i,
+            labelSource: "fixture",
+            model: "fixture",
+            modelTag: models[i % models.length],
+            depth: 1,
+            task: "fixture task " + i,
+            running,
+            runningSource: "fixture",
+            tools: 1 + ((i * 7) % 28),
+            errors,
+            startedTs: new Date(Date.now() - i * 1000).toISOString(),
+            lastTs: new Date(Date.now() - (i % 5) * 1000).toISOString(),
+            durMs: 1000 * (5 + i),
+            current:
+              running && i % 3 === 0
+                ? { tool: "Read", icon: "📖", label: "file" + i + ".ts", startedTs: new Date(Date.now() - 3000).toISOString() }
+                : null,
+            lastTool: { tool: "Bash", icon: "⌨️", label: "cmd " + i, durMs: 400, error: false },
+            answer,
+            events: [],
+          };
+        });
+        const models_ = {};
+        for (const s of subs) models_[s.modelTag] = (models_[s.modelTag] || 0) + 1;
+        const fixtureErrorStats = [
+          { id: "assert-fail", label: "npm test ล้มเหลว (assertion)", fix: "แก้ expected value ให้ตรงกับ format ใหม่ก่อนรันซ้ำ", n: 4, tokens: 62000 },
+          { id: "enoent", label: "ENOENT: หาไฟล์ไม่เจอ", fix: "เช็ค path ให้ตรงก่อนอ่านไฟล์ — ใช้ Glob หา path จริงแทนการเดา", n: 3, tokens: 41000 },
+          { id: "timeout", label: "คำสั่งค้างเกิน timeout", fix: "แยกงานที่ใช้เวลานานไปรันแบบ background แล้ว poll ผลแทน", n: 2, tokens: 30000 },
+          { id: "denied", label: "ถูก guard บล็อก", fix: "—", n: 1, tokens: 5000 },
+        ];
+        const fixtureEvents = [
+          { i: 1, kind: "prompt", text: "Fix the failing test in src/components/Button.tsx and make sure the suite is green." },
+          { i: 2, kind: "thinking", text: "Let me open the component and its test file before changing anything." },
+          {
+            i: 3,
+            kind: "tool",
+            tool: "Read",
+            icon: "📖",
+            label: "src/components/Button.tsx",
+            done: true,
+            durMs: 110,
+            error: false,
+            hasDetail: true,
+            detail: {
+              input: [{ key: "file_path", text: "src/components/Button.tsx" }],
+              result: {
+                text: "export function Button({ label, onClick }) {\n  return <button onClick={onClick}>{label}</button>;\n}\n",
+                failed: false,
+                bytes: 96,
+              },
+            },
+          },
+          {
+            i: 4,
+            kind: "tool",
+            tool: "Bash",
+            icon: "⌨️",
+            label: "npm test",
+            done: true,
+            durMs: 4200,
+            error: true,
+            hasDetail: true,
+            detail: {
+              input: [{ key: "command", text: "npm test" }],
+              result: { text: "Command failed with exit code 1", failed: true, bytes: 32 },
+            },
+          },
+          {
+            i: 5,
+            kind: "error",
+            tool: "Bash",
+            errorLabel: "exit code 1",
+            wastedTokens: 15200,
+            text: "Command failed with exit code 1",
+            hasDetail: true,
+            detail: {
+              reason: "npm test exited with a failing assertion",
+              result: { text: "Command failed with exit code 1", failed: true, bytes: 32 },
+            },
+          },
+          { i: 6, kind: "thinking", text: "The test imports a helper that isn't there yet — let me check the path it's reading from." },
+          {
+            i: 7,
+            kind: "tool",
+            tool: "Read",
+            icon: "📖",
+            label: "src/utils/format.ts",
+            done: true,
+            durMs: 70,
+            error: true,
+            hasDetail: true,
+            detail: {
+              input: [{ key: "file_path", text: "src/utils/format.ts" }],
+              result: { text: "ENOENT: no such file or directory, open 'src/utils/format.ts'", failed: true, bytes: 58 },
+            },
+          },
+          {
+            i: 8,
+            kind: "error",
+            tool: "Read",
+            errorLabel: "file not found",
+            wastedTokens: 9800,
+            text: "ENOENT: no such file or directory, open 'src/utils/format.ts'",
+            hasDetail: true,
+            detail: {
+              reason: "Read failed — path does not exist",
+              result: { text: "ENOENT: no such file or directory, open 'src/utils/format.ts'", failed: true, bytes: 58 },
+            },
+          },
+          {
+            i: 9,
+            kind: "tool",
+            tool: "Grep",
+            icon: "🔎",
+            label: "useState in src/",
+            done: true,
+            durMs: 60,
+            error: false,
+            hasDetail: true,
+            detail: {
+              input: [
+                { key: "pattern", text: "useState" },
+                { key: "path", text: "src/" },
+              ],
+              result: { text: "src/components/Button.tsx:12:  const [pressed, setPressed] = useState(false);", failed: false, bytes: 78 },
+            },
+          },
+          {
+            i: 10,
+            kind: "tool",
+            tool: "Edit",
+            icon: "✏️",
+            label: "src/utils/format.ts",
+            done: true,
+            durMs: 130,
+            error: false,
+            hasDetail: true,
+            detail: {
+              input: [
+                { key: "file_path", text: "src/utils/format.ts" },
+                { key: "old_string", text: "from '../format'" },
+                { key: "new_string", text: "from '../utils/format'" },
+              ],
+              result: { text: "File updated successfully.", failed: false, bytes: 28 },
+            },
+          },
+          {
+            i: 11,
+            kind: "denied",
+            rule: "workspace-guard",
+            denyLabel: "path outside workspace",
+            text: "Blocked: rm -rf build/ — command touches a path outside the allowed workspace root",
+            hasDetail: true,
+            detail: {
+              reason: "Command touches a path outside the allowed workspace root",
+              deniedTool: { tool: "Bash", label: "rm -rf build/" },
+            },
+          },
+          {
+            i: 12,
+            kind: "tool",
+            tool: "Bash",
+            icon: "⌨️",
+            label: "npm test",
+            done: true,
+            durMs: 3900,
+            error: false,
+            hasDetail: true,
+            detail: {
+              input: [{ key: "command", text: "npm test" }],
+              result: { text: "PASS src/components/Button.test.tsx\nTest Suites: 1 passed, 1 total", failed: false, bytes: 68 },
+            },
+          },
+          {
+            i: 13,
+            kind: "tool",
+            tool: "Bash",
+            icon: "⌨️",
+            label: "npm run e2e",
+            done: true,
+            durMs: 120000,
+            error: true,
+            hasDetail: true,
+            detail: {
+              input: [{ key: "command", text: "npm run e2e" }],
+              result: { text: "Timed out after 120000ms", failed: true, bytes: 25 },
+            },
+          },
+          {
+            i: 14,
+            kind: "error",
+            tool: "Bash",
+            errorLabel: "timeout",
+            wastedTokens: 22000,
+            text: "Timed out after 120000ms",
+            hasDetail: true,
+            detail: {
+              reason: "e2e run did not finish before the sandbox timeout",
+              result: { text: "Timed out after 120000ms", failed: true, bytes: 25 },
+            },
+          },
+          {
+            i: 15,
+            kind: "say",
+            text: "Fixed the failing unit test — Button.tsx now imports the formatting helper from the correct path, and npm test is green. The e2e run timed out in this sandbox; that looks environment-related rather than a code issue.",
+          },
+        ];
+        return {
+          nowMs: Date.now(),
+          /*
+           * fixture: a healthy quota payload.
+           *
+           * Without this, `renderQuota()` reads `usage.v` as missing, decides the server is
+           * running older code than the page, and replaces the whole quota bar with the
+           * "server ยังเป็นโค้ดเก่า" warning. In `?fixture` that warning is a lie — there is no
+           * server payload at all — and it is the first thing a new user sees, so the demo has
+           * to carry a current-version `usage` just like the 3D page's `buildUsage()` does.
+           */
+          usage: (() => {
+            const SESSION_WINDOW_MS = 5 * 60 * 60 * 1000;
+            const WEEKLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+            const now = Date.now();
+            const elapsed = 2 * 60 * 60 * 1000 + 4 * 60 * 1000;
+            const startedAtMs = now - elapsed;
+            const iso = (ms) => new Date(ms).toISOString();
+            return {
+              v: 2,
+              source: "cache",
+              fetchedAtMs: now - 92000,
+              limits: [
+                { kind: "session", group: "session", percent: 34, severity: "normal", resetsAt: iso(startedAtMs + SESSION_WINDOW_MS), isActive: true, scope: "" },
+                { kind: "weekly_all", group: "weekly", percent: 12, severity: "normal", resetsAt: iso(startedAtMs + WEEKLY_WINDOW_MS), isActive: false, scope: "" },
+              ],
+              extraUsage: { enabled: false, utilization: null, spendLimitReached: false },
+              sessionKnown: true,
+              sessionEstimate: null,
+              window: {
+                startedAtMs,
+                resetsAtMs: startedAtMs + SESSION_WINDOW_MS,
+                exact: true,
+                elapsedMs: elapsed,
+                remainingMs: Math.max(0, SESSION_WINDOW_MS - elapsed),
+                tokens: { input: 184000, cacheCreate: 1240000, cacheRead: 46800000, output: 268000, thinking: 92000, requests: 412 },
+                byModel: [
+                  { model: "claude-opus-5", billed: 161000 },
+                  { model: "claude-sonnet-5", billed: 67000 },
+                  { model: "claude-haiku-4-5-20251001", billed: 27000 },
+                ],
+              },
+              cache: { fetchedAtMs: now - 92000 },
+              live: { enabled: false, ok: false, error: null, lastTryMs: null, lastOkMs: null, nextTryMs: null },
+            };
+          })(),
+          totals: {
+            live: 1,
+            busy: 1,
+            waiting: 0,
+            subsRunning: n,
+            subsTotal: n,
+            toolsRunning: Math.min(n, 6),
+            tools: 500,
+            errors: 3,
+            // fixture: totals.tokens must exist or renderQuota() treats the server as stale
+            // (index.html:3506 sets staleServer = !(totals && totals.tokens)).
+            tokens: {
+              input: 184000,
+              cacheCreate: 1240000,
+              cacheRead: 46800000,
+              output: 268000,
+              thinking: 92000,
+              requests: 412,
+              errorRecovery: 138000,
+            },
+            denials: 1,
+          },
+          agents: [
+            {
+              sessionId: "fixture-session",
+              pid: 0,
+              name: "fixture",
+              title: "ทดสอบความหนาแน่น " + n + " node",
+              alive: true,
+              kind: "interactive",
+              entrypoint: "claude-vscode",
+              version: "0",
+              cwd: "C:\\Users\\dev\\projects\\web-app",
+              gitBranch: "master",
+              model: "claude-opus-5",
+              effort: "max",
+              startedAt: Date.now() - 60000,
+              lastTs: new Date().toISOString(),
+              counts: { tools: 500, errors: 3, denials: 1, prompts: 4 },
+              // renderWaste's denominator is tokTotal(a.tokens) + tokTotal(a.subTotals.tokens),
+              // so both have to exist or the waste header reads "138K out of 0".
+              tokens: { input: 62000, cacheCreate: 410000, cacheRead: 15200000, output: 88000, thinking: 31000, requests: 137, errorRecovery: 46000, partial: false },
+              status: { state: "tool", since: new Date(Date.now() - 4000).toISOString(), running: [{ tool: "Bash", icon: "⌨️", label: "fixture", startedTs: new Date(Date.now() - 4000).toISOString() }] },
+              subTotals: {
+                total: n,
+                running: subs.filter((s) => s.running).length,
+                done: subs.filter((s) => !s.running).length,
+                failed: subs.filter((s) => !s.running && s.errors).length,
+                withErrors: subs.filter((s) => s.errors).length,
+                runningWithErrors: subs.filter((s) => s.running && s.errors).length,
+                errors: 5,
+                tools: 500,
+                tokens: { input: 122000, cacheCreate: 830000, cacheRead: 31600000, output: 180000, thinking: 61000, requests: 275, errorRecovery: 92000, partial: false },
+                models: models_,
+                runningModels: models_,
+              },
+              subagents: subs,
+              errorStats: fixtureErrorStats,
+              events: fixtureEvents,
+              hasTranscript: true,
+            },
+          ],
+        };
+      }
+
+      function connect() {
+        const fx = new URLSearchParams(location.search).get("fixture");
+        if (fx) {
+          snapshot = fixture(Math.max(1, Math.min(240, Number(fx) || 45)));
+          $("#conn").classList.add("on");
+          $("#conn").lastElementChild.textContent = "fixture";
+          render();
+          return;
+        }
+        const es = new EventSource("/api/stream");
+        es.onopen = () => {
+          $("#conn").classList.add("on");
+          $("#conn").lastElementChild.textContent = "สด";
+        };
+        es.onmessage = (e) => {
+          try {
+            snapshot = JSON.parse(e.data);
+          } catch {
+            return;
+          }
+          render();
+        };
+        es.onerror = () => {
+          $("#conn").classList.remove("on");
+          $("#conn").lastElementChild.textContent = "หลุด — ต่อใหม่…";
+          es.close();
+          setTimeout(connect, 1500);
+        };
+      }
+      connect();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,49 @@
+{
+  "name": "agent-activity-dashboard",
+  "version": "1.0.0",
+  "description": "Live dashboard for Claude Code sessions and their sub-agents - see WHICH tool, WHICH file, for HOW long, on every surface (CLI, VS Code, desktop, background). Zero dependencies, read-only, localhost only.",
+  "type": "module",
+  "main": "server.mjs",
+  "bin": {
+    "agent-activity-dashboard": "server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs --open"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "server.mjs",
+    "lib/",
+    "public/",
+    "README.md",
+    "README.th.md",
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md",
+    "docs/"
+  ],
+  "keywords": [
+    "claude-code",
+    "claude",
+    "ai-agent",
+    "dashboard",
+    "observability",
+    "monitoring",
+    "subagent",
+    "sse",
+    "three.js"
+  ],
+  "license": "MIT",
+  "author": "greentourn",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/greentourn/agent-activity-dashboard.git"
+  },
+  "homepage": "https://github.com/greentourn/agent-activity-dashboard#readme",
+  "bugs": {
+    "url": "https://github.com/greentourn/agent-activity-dashboard/issues"
+  },
+  "dependencies": {},
+  "private": false
+}
