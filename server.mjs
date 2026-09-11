@@ -2704,7 +2704,12 @@ server.on("error", (err) => {
 
 server.listen(ARGS.port, "127.0.0.1", () => {
   const url = `http://127.0.0.1:${ARGS.port}`;
-  process.stdout.write(`\n  Agent Activity Dashboard → ${url}\n`);
+  // Both views come off this one server, but the classic page has no link to the 3D one — so
+  // list both URLs here, where the person choosing is actually looking. `--open` still goes to
+  // the classic view; the second line is there to be clicked/copied.
+  process.stdout.write(`\n  Agent Activity Dashboard\n`);
+  process.stdout.write(`    Classic (2D)      → ${url}/\n`);
+  process.stdout.write(`    NEURAL CORE (3D)  → ${url}/brain.html\n`);
   process.stdout.write(`  watching ${SESSIONS_DIR}\n`);
   process.stdout.write(`         + ${PROJECTS_DIR}\n`);
   // Say out loud whether the credential-reading path is armed. A flag that silently starts

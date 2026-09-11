@@ -130,8 +130,9 @@ instead, and if there is no local voice at all, effects continue without an erro
 as Edge's "Online (Natural)" set are never used.
 
 > ⚠️ Two things to know: `--open` always opens the **classic** view, and the classic view has **no
-> link** to the 3D one — type `/brain.html` yourself. The 3D view does have a `← หน้าคลาสสิก`
-> ("back to classic") link in its bottom-right control bar.
+> link** to the 3D one — the server prints both URLs in its startup banner, so open the
+> `/brain.html` one from there. The 3D view does have a `← หน้าคลาสสิก` ("back to classic") link
+> in its bottom-right control bar.
 
 ---
 

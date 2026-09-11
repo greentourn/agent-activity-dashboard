@@ -57,7 +57,9 @@ node server.mjs --open
 You should see this on the terminal:
 
 ```
-  Agent Activity Dashboard → http://127.0.0.1:7676
+  Agent Activity Dashboard
+    Classic (2D)      → http://127.0.0.1:7676/
+    NEURAL CORE (3D)  → http://127.0.0.1:7676/brain.html
   watching C:\Users\you\.claude\sessions
          + C:\Users\you\.claude\projects
   โควตา: หน้าต่าง 5 ชม. สดจาก transcript · % อย่างเป็นทางการมาจาก cache (ใส่ --live-usage เพื่อดึงสด)
@@ -65,7 +67,8 @@ You should see this on the terminal:
   Ctrl+C to stop
 ```
 
-That third line means: *"Quota: the 5-hour window is live from the transcripts; the official
+Both views are listed so you can pick either one straight from the terminal (`--open` only
+launches the classic one). The `โควตา:` line means: *"Quota: the 5-hour window is live from the transcripts; the official
 percentage comes from cache (pass `--live-usage` to fetch it live)."*
 
 Stop the server with `Ctrl+C` — it prints `stopped` and exits cleanly.
@@ -209,8 +212,8 @@ number on screen instead of blanking the bar.
 | Finished sessions linger | by design, for `--stale-minutes` (default 30). Lower it: `--stale-minutes 5` |
 | `/brain.html` shows *"เบราว์เซอร์นี้เปิด WebGL ไม่ได้"* | your browser/GPU has no WebGL. That screen links back to the classic view, which needs no WebGL |
 | `/brain.html` is black and never loads | a boot guard warns after 12 s. Try `?quality=low`, or use the classic view |
-| `--open` opened the 2D view, not the 3D one | expected — `--open` always opens the classic view. Type `/brain.html` yourself |
-| No link from the classic view to the 3D one | there isn't one yet. Type the URL; the 3D view *does* have a link back |
+| `--open` opened the 2D view, not the 3D one | expected — `--open` always opens the classic view. The 3D URL is printed right under it in the terminal banner; open that one yourself |
+| No link from the classic view to the 3D one | there isn't one yet. Copy the `/brain.html` URL from the terminal banner (or type it); the 3D view *does* have a link back |
 | Deep sub-agents look like children of the session | should not happen — parents are pulled back in past the send cap. If you see it, please open an issue with what you did |
 | Old tool calls missing from a long session | expected: each transcript is seeded from its last 256 KB only |
 | Edited `server.mjs`, nothing changed | there is no hot reload. Restart it |

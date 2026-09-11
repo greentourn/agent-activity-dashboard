@@ -32,8 +32,8 @@ in whatever language you and your agents work in.
 | Data source | the same `/api/stream` SSE feed | the same `/api/stream` SSE feed |
 
 `--open` always opens the **classic** view. There is no link from the classic view to the 3D one —
-type `/brain.html`. The 3D view has a `← หน้าคลาสสิก` ("classic view") link in its bottom-right
-control bar.
+the server prints both URLs in its startup banner, so open the `/brain.html` one from there. The
+3D view has a `← หน้าคลาสสิก` ("classic view") link in its bottom-right control bar.
 
 ---
 
