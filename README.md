@@ -11,7 +11,7 @@ cross-platform Thai activity audio: recognisable futuristic cues for every fresh
 language speech for important changes, and matching visual pulses.
 
 ```bash
-node server.mjs --open
+node server.mjs --open --live-usage
 ```
 
 > 🇹🇭 **A note on language before you scroll:** the *interface* is in Thai (buttons read
