@@ -20,6 +20,9 @@
   const REMINDER_EFFECT_MS = 30_000;
   const REMINDER_SPEECH_MS = 90_000;
   const REMINDER_REPEAT_MS = 120_000;
+  // Speech synthesis has its own browser mixer. Keep Web Audio effects deliberately stronger so
+  // they remain distinct beside a full-volume Thai utterance, while the limiter catches storms.
+  const EFFECT_GAIN = 2.35;
   const AUDIO_MODES = new Set(["off", "effects", "voice"]);
   const DELEGATION_TOOLS = new Set(["Agent", "Task"]);
 
@@ -431,13 +434,13 @@
       try {
         audioCtx = new AudioCtor();
         masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.92;
+        masterGain.gain.value = 1.08;
         if (typeof audioCtx.createDynamicsCompressor === "function") {
           try {
             limiter = audioCtx.createDynamicsCompressor();
-            limiter.threshold.value = -14;
+            limiter.threshold.value = -10;
             limiter.knee.value = 5;
-            limiter.ratio.value = 12;
+            limiter.ratio.value = 14;
             limiter.attack.value = 0.002;
             limiter.release.value = 0.14;
             limiter.connect(audioCtx.destination);
@@ -482,10 +485,15 @@
         osc.frequency.setValueAtTime(Math.max(40, frequency), start);
         if (endFrequency) osc.frequency.exponentialRampToValueAtTime(Math.max(40, endFrequency), end);
         filter.type = "bandpass";
-        filter.frequency.value = Math.max(220, frequency * 1.7);
-        filter.Q.value = 3.5;
+        // The earlier centre frequency sat far above sine/triangle fundamentals, effectively
+        // filtering the cue out on small speakers. Keep it near the note with a broad band.
+        filter.frequency.value = Math.max(220, frequency * 1.08);
+        filter.Q.value = 0.85;
         gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(Math.max(0.001, volume || 0.025), start + 0.012);
+        gain.gain.exponentialRampToValueAtTime(
+          Math.max(0.001, (volume || 0.025) * EFFECT_GAIN),
+          start + 0.012,
+        );
         gain.gain.exponentialRampToValueAtTime(0.0001, end);
         osc.connect(filter).connect(gain).connect(masterGain);
         activeOscillators.add(osc);

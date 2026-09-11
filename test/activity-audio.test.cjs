@@ -550,11 +550,11 @@ test("audio-only browsers still synthesize a sonic cue for every detected event"
     now: () => clock,
   });
   t.after(() => controller.dispose());
-  controller.setEnabled(true, { userGesture: true, preview: false });
+  controller.setMode("voice", { userGesture: true, preview: false });
   assert.equal(context.state, "running");
-  assert.equal(gainNodes[0].gain.value, 0.92, "event master gain stays at the louder preset");
-  assert.equal(compressor.threshold.value, -14);
-  assert.equal(compressor.ratio.value, 12);
+  assert.equal(gainNodes[0].gain.value, 1.08, "event master gain stays at the audible preset");
+  assert.equal(compressor.threshold.value, -10);
+  assert.equal(compressor.ratio.value, 14);
   controller.ingest(snapshot(clock));
 
   clock += 700;
@@ -569,7 +569,7 @@ test("audio-only browsers still synthesize a sonic cue for every detected event"
   // Cue families use different note counts. At least one oscillator per fresh event proves that
   // neither edge was batched away.
   assert.ok(started.length >= 3);
-  assert.ok(Math.max(...gainRamps) >= 0.055, "ordinary event cues use the louder per-tone level");
+  assert.ok(Math.max(...gainRamps) >= 0.12, "ordinary event cues use the stronger per-tone level");
   assert.equal(stopped.length, started.length, "each tone has its normal scheduled stop");
   controller.cancel("bfcache");
   assert.equal(stopped.length, started.length * 2, "navigation cancel immediately stops every scheduled tone");
