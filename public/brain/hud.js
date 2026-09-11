@@ -1228,9 +1228,11 @@ export function createHud(root, options = {}) {
     if (!voiceState.supported) {
       refs.voiceBtn.title = "เบราว์เซอร์นี้ไม่รองรับเสียงพูดหรือเสียงเอฟเฟกต์";
     } else if (voiceState.voiceEnabled && !voiceState.voiceAvailable) {
-      refs.voiceBtn.title = "ยังไม่พบเสียงภาษาไทยในเครื่อง — โหมดนี้จะเล่นเอฟเฟกต์แทน";
+      refs.voiceBtn.title = "ไม่พบเสียงพูดในเครื่องเลย — โหมดนี้จะเล่นเอฟเฟกต์แทน";
     } else if (voiceState.voiceEnabled && !voiceState.unlocked) {
       refs.voiceBtn.title = "แตะอีกครั้งเพื่อเริ่มเสียงพูดและฟังตัวอย่าง";
+    } else if (voiceState.voiceEnabled && voiceState.voiceFallback) {
+      refs.voiceBtn.title = `ไม่พบเสียงภาษาไทย — ใช้เสียงของเครื่องพูดภาษาอังกฤษแทน${voiceState.voiceName ? ` · ${voiceState.voiceName}` : ""}`;
     } else {
       refs.voiceBtn.title = "พูดภาษาไทยเฉพาะเหตุการณ์สำคัญ พร้อมเสียงสัญญาณ";
     }

@@ -76,7 +76,7 @@ one.
 | **Install step** | none — zero dependencies, no `npm install`, no build |
 | **Network** | none required. three.js is vendored in `public/vendor/`, so it works fully offline |
 | **Claude Code** | needed only to have *something to watch*. The dashboard itself never launches or talks to Claude Code |
-| **Browser** | any modern browser on Windows, macOS, or Linux. Activity effects use Web Audio; optional Thai speech uses an installed local `th-*` Web Speech voice and falls back safely to effects only if none is available. The 3D view additionally needs WebGL |
+| **Browser** | any modern browser on Windows, macOS, or Linux. Activity effects use Web Audio; optional speech prefers an installed local `th-*` Web Speech voice; without one it uses the machine's own local voice (typically English) with an English phrase set, and falls back to effects only if no local voice exists at all. The 3D view additionally needs WebGL |
 
 ---
 
@@ -121,10 +121,13 @@ one message instead of competing with each other. The first snapshot is a silent
 duplicate snapshots never replay audio.
 
 Only the selected mode and reminder preference are kept in browser storage—never activity or
-transcript data. Effects are generated locally and speech uses a local Thai voice exposed by the
-browser/OS, so the audio feature sends no text or activity data over the network. This is not tied to
-Windows: it follows the same path on macOS and other supported desktop systems; if Thai speech is
-unavailable, effects continue without an error.
+transcript data. Effects are generated locally and speech only ever uses a voice the browser/OS marks as
+local, so the audio feature sends no text or activity data over the network. This is not tied to
+Windows: it follows the same path on macOS and other supported desktop systems. A local Thai voice
+(`Microsoft Premwadee` on Windows, installed via the Thai language pack's text-to-speech feature) is
+preferred; if none is installed, the machine's default local voice speaks the same cues in English
+instead, and if there is no local voice at all, effects continue without an error. Cloud voices such
+as Edge's "Online (Natural)" set are never used.
 
 > ⚠️ Two things to know: `--open` always opens the **classic** view, and the classic view has **no
 > link** to the 3D one — type `/brain.html` yourself. The 3D view does have a `← หน้าคลาสสิก`

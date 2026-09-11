@@ -657,9 +657,122 @@ test("voice mode keeps activity local: a remote-only Thai voice falls back to ef
   t.after(() => controller.dispose());
   controller.setMode("voice", { userGesture: true, preview: false });
   assert.equal(controller.getState().voiceAvailable, false);
+  assert.equal(controller.getState().voiceLanguage, "");
   controller.announce("prompt", { force: true, timestamp: Date.now(), eventKey: "remote-only" });
   assert.equal(remoteOnlySpeech.spoken.length, 0);
   assert.ok(visuals.some((event) => event.phase === "cue" && event.kind === "prompt"));
+});
+
+async function voicesHarness(voices) {
+  const api = await loadApi();
+  const speech = fakeSpeech();
+  speech.getVoices = () => voices;
+  const controller = api.create({
+    storage: fakeStorage(),
+    speechSynthesis: speech,
+    SpeechSynthesisUtterance: FakeUtterance,
+    AudioContext: null,
+    document: null,
+  });
+  return { controller, speech };
+}
+
+const THAI_TEXT = /[฀-๿]/;
+
+test("without a Thai voice, the machine's local default voice speaks the English phrase set", async (t) => {
+  const { controller, speech } = await voicesHarness([
+    { name: "Microsoft Zira", lang: "en-US", localService: true, default: false },
+    { name: "Microsoft David", lang: "en-US", localService: true, default: true },
+    { name: "Premwadee Online (Natural)", lang: "th-TH", localService: false, default: false },
+  ]);
+  t.after(() => controller.dispose());
+  controller.setMode("voice", { userGesture: true, preview: false });
+  const state = controller.getState();
+  assert.equal(state.voiceAvailable, true);
+  assert.equal(state.voiceFallback, true);
+  assert.equal(state.voiceLanguage, "en");
+  assert.equal(state.voiceName, "Microsoft David");
+
+  controller.announce("prompt", { force: true, timestamp: Date.now(), eventKey: "fallback-prompt" });
+  assert.equal(speech.spoken.length, 1);
+  const utterance = speech.spoken[0];
+  assert.equal(utterance.lang, "en-US");
+  assert.equal(utterance.voice.name, "Microsoft David");
+  assert.ok(utterance.text.length > 0);
+  assert.ok(!THAI_TEXT.test(utterance.text), `expected an English phrase, got ${utterance.text}`);
+});
+
+test("a local Thai voice still wins over the machine's default voice", async (t) => {
+  const { controller, speech } = await voicesHarness([
+    { name: "Microsoft David", lang: "en-US", localService: true, default: true },
+    { name: "Microsoft Premwadee", lang: "th-TH", localService: true, default: false },
+  ]);
+  t.after(() => controller.dispose());
+  controller.setMode("voice", { userGesture: true, preview: false });
+  const state = controller.getState();
+  assert.equal(state.voiceFallback, false);
+  assert.equal(state.voiceLanguage, "th");
+  assert.equal(state.voiceName, "Microsoft Premwadee");
+
+  controller.announce("prompt", { force: true, timestamp: Date.now(), eventKey: "thai-prompt" });
+  assert.equal(speech.spoken.length, 1);
+  assert.equal(speech.spoken[0].lang, "th-TH");
+  assert.ok(THAI_TEXT.test(speech.spoken[0].text));
+});
+
+test("fallback prefers an English local voice over a non-English default", async (t) => {
+  const { controller } = await voicesHarness([
+    { name: "Microsoft Haruka", lang: "ja-JP", localService: true, default: true },
+    { name: "Microsoft Mark", lang: "en-US", localService: true, default: false },
+  ]);
+  t.after(() => controller.dispose());
+  controller.setMode("voice", { userGesture: true, preview: false });
+  assert.equal(controller.getState().voiceName, "Microsoft Mark");
+  assert.equal(controller.getState().voiceLanguage, "en");
+});
+
+test("every Thai phrase pool key has an English counterpart of the same size", async (t) => {
+  // Reminder/burst/state keys are resolved by name at announce time, so a missing English key
+  // would silently produce an empty utterance on machines without a Thai voice.
+  const { controller, speech } = await voicesHarness([
+    { name: "Microsoft David", lang: "en-US", localService: true, default: true },
+  ]);
+  t.after(() => controller.dispose());
+  controller.setMode("voice", { userGesture: true, preview: false });
+  const cases = [
+    ["ready", {}],
+    ["prompt", {}],
+    ["spawn", { count: 1 }],
+    ["spawn", { count: 3 }],
+    ["finish", { ok: true }],
+    ["finish", { ok: false }],
+    ["finish", { ok: null }],
+    ["error", {}],
+    ["denied", {}],
+    ["blocked", {}],
+    ["session-start", {}],
+    ["session-end", {}],
+    ["burst", {}],
+    ["state", { state: "thinking" }],
+    ["state", { state: "delegating" }],
+    ["state", { state: "idle" }],
+    ["state", { state: "waiting", waitingKind: "question", waitingCount: 1 }],
+    ["state", { state: "waiting", waitingKind: "confirmation", waitingCount: 1 }],
+    ["state", { state: "waiting", waitingKind: "other", waitingCount: 1 }],
+    ["state", { state: "waiting", waitingKind: "question", waitingCount: 2 }],
+    ["reminder", { waitingKind: "question", waitingCount: 1 }],
+    ["reminder", { waitingKind: "confirmation", waitingCount: 1 }],
+    ["reminder", { waitingKind: "other", waitingCount: 1 }],
+    ["reminder", { waitingKind: "question", waitingCount: 3 }],
+  ];
+  for (const [kind, detail] of cases) {
+    speech.spoken.length = 0;
+    controller.cancel("test");
+    controller.announce(kind, { ...detail, force: true, speak: true, timestamp: Date.now(), eventKey: `en:${kind}:${JSON.stringify(detail)}` });
+    assert.equal(speech.spoken.length, 1, `${kind} ${JSON.stringify(detail)} should speak`);
+    const text = speech.spoken[0].text;
+    assert.ok(text && !THAI_TEXT.test(text), `${kind} ${JSON.stringify(detail)} spoke "${text}"`);
+  }
 });
 
 test("plain Thai phrase pools avoid an immediate repeated line", async (t) => {

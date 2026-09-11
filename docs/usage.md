@@ -102,9 +102,11 @@ setting remains remembered while audio is off, but produces no sound until an au
 selected.
 
 Repeated SSE snapshots never replay sounds, and the first snapshot is a silent baseline rather than
-old history. Effects are generated locally with Web Audio. Speech selects an installed local `th-*`
-voice exposed through Web Speech on Windows, macOS, or another supported OS; if Thai speech is not
-available, the feature falls back safely to effects only. The audio path sends no text or activity
+old history. Effects are generated locally with Web Audio. Speech prefers an installed local `th-*`
+voice exposed through Web Speech on Windows, macOS, or another supported OS; if no Thai voice is
+installed, the machine's default local voice speaks an English version of the same cues (the button
+tooltip shows which voice is in use), and if no local voice exists at all the feature falls back
+safely to effects only. The audio path sends no text or activity
 data over the network.
 
 ### The side panel tabs

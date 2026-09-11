@@ -119,6 +119,55 @@
     "reminder-many": ["มีหลายงานกำลังรอคุณอยู่", "ยังมีหลายงานที่ต้องการคำตอบจากคุณ", "อย่าลืมกลับมาดูงานที่รออยู่หลายรายการ"],
   });
 
+  // เครื่องที่ไม่มี voice ภาษาไทยจะถอยไปใช้ voice ของเครื่อง (มักเป็นอังกฤษ) — voice พวกนั้นอ่านอักษรไทย
+  // ไม่ออกและมักเงียบไปเลย จึงต้องมีชุดประโยคอังกฤษคู่ขนานที่ใช้ key เดียวกันทุกตัว
+  const PHRASE_POOLS_EN = Object.freeze({
+    ready: ["Audio is ready", "Ready to report progress", "Activity sound is on"],
+    prompt: ["New task received", "Starting a new task", "Got it, starting work"],
+    thinking: ["Thinking", "Analysing the task", "Give me a moment to think"],
+    say: ["Preparing an answer", "Summarising the answer", "Almost have an answer"],
+    "tool-read": ["Reading data", "Checking the data", "Opening the details"],
+    "tool-search": ["Searching for data", "Looking through the data", "Finding related items"],
+    "tool-edit": ["Editing a file", "Adjusting the work", "Making changes"],
+    "tool-command": ["Running a command", "Doing the next step", "Running a required job"],
+    "tool-web": ["Searching the web", "Checking online data", "Looking up data from the web"],
+    "tool-question": ["A question is waiting for you", "Your answer is needed to continue", "Ready to continue once you answer"],
+    "tool-service": ["Contacting a related service", "Fetching data from another service", "Coordinating with an external service"],
+    "tool-generic": ["Working on a step", "Continuing the work", "Processing the task"],
+    "tool-end": ["This step is done", "Finished this step", "This part is complete"],
+    "tool-error": ["This step has a problem", "An error occurred in this step", "This step did not succeed"],
+    spawn: ["Called in a helper", "Handed work to a helper", "A helper has joined the work"],
+    "spawn-many": ["Called in more helpers", "Split the work among several helpers", "Several helpers are working now"],
+    "finish-ok": ["A helper has finished", "Got results from a helper", "The helper's work is complete"],
+    "finish-failed": ["A helper did not succeed", "The helper's task had a problem", "The helper did not return the expected result"],
+    "finish-unknown": ["A helper has stopped", "The helper's task has ended", "A helper has left this task"],
+    error: ["An error occurred", "Something went wrong", "This part hit a problem"],
+    denied: ["This command was not allowed", "This step was rejected", "Cannot continue this step yet"],
+    blocked: ["The work is stuck", "This task has been stopped", "Something is blocking the work"],
+    "session-start": ["A new task has arrived", "Now watching a new task", "New task detected"],
+    "session-end": ["One task has ended", "Closed one task", "A task is complete"],
+    burst: ["Handling several steps", "Several things are happening at once", "Catching up on several parts"],
+    "state-thinking": ["Thinking", "Analysing further", "Reviewing the data"],
+    "state-tool": ["Getting to work", "Doing the next step", "Processing the task"],
+    "state-delegating": ["Waiting for a helper", "A helper is working", "Handed work to a helper, waiting for results"],
+    "state-wait-question": ["A question is waiting for you", "Your answer is needed to continue", "Ready to continue once you answer"],
+    "state-wait-confirm": ["A step is waiting for your review", "An item needs your confirmation", "Your review is needed before continuing"],
+    "state-wait-generic": ["A task is waiting for you", "Your help is needed to continue", "Ready to continue when you return"],
+    "state-idle": ["This round is done", "This part is finished", "Idle and ready for more work"],
+    "reminder-question": ["A question is still waiting for you", "Don't forget to come back and answer", "A task needs your answer"],
+    "reminder-confirm": ["A step is still waiting for your review", "Don't forget to confirm the waiting task", "An item is waiting for your review"],
+    "reminder-generic": ["A task is still waiting for you", "Don't forget to check the waiting task", "A task is ready to continue when you return"],
+    "reminder-many": ["Several tasks are waiting for you", "Several tasks still need your answer", "Don't forget to check the waiting tasks"],
+  });
+
+  function isThaiLang(value) {
+    return /^th(?:-|_|$)/i.test(String(value || ""));
+  }
+
+  function isEnglishLang(value) {
+    return /^en(?:-|_|$)/i.test(String(value || ""));
+  }
+
   function safeCall(fn, ...args) {
     if (typeof fn !== "function") return;
     try {
@@ -229,14 +278,28 @@
     return "";
   }
 
-  function phraseFor(kind, detail, choose) {
+  function phraseFor(kind, detail, choose, pools) {
     const d = detail || {};
     if (d.textOverride) return String(d.textOverride);
     const poolKey = phraseKeyFor(kind, d);
     if (!poolKey) return "";
-    const pool = PHRASE_POOLS[poolKey] || [];
+    const pool = (pools || PHRASE_POOLS)[poolKey] || [];
     if (!pool.length) return "";
     return typeof choose === "function" ? choose(poolKey, pool) : pool[0];
+  }
+
+  // Prefer the machine's own default voice when it can read English, then any English voice,
+  // then whatever local default exists. Only local voices are ever considered so the offline
+  // promise holds even on browsers that also list cloud voices.
+  function pickFallbackVoice(localVoices) {
+    if (!localVoices.length) return null;
+    const english = localVoices.filter((v) => isEnglishLang(v.lang));
+    return (
+      english.find((v) => v.default === true) ||
+      english[0] ||
+      localVoices.find((v) => v.default === true) ||
+      localVoices[0]
+    );
   }
 
   function semanticFromRaw(ev, base, fallbackNow) {
@@ -356,6 +419,10 @@
         speaking: !!currentSpeech,
         level,
         voiceName: selectedVoice ? selectedVoice.name || "" : "",
+        // "th" when a local Thai voice speaks the Thai phrases, "en" when the machine's own
+        // voice reads the English fallback set, "" when no local voice exists.
+        voiceLanguage: selectedVoice ? (voiceIsThai() ? "th" : "en") : "",
+        voiceFallback: !!selectedVoice && !voiceIsThai(),
       };
     }
 
@@ -420,13 +487,23 @@
         voices = [];
       }
       voicesResolved = voices.length > 0;
-      const thai = voices.filter((v) => /^th(?:-|_)/i.test(String(v.lang || "")));
       // Keep the privacy/offline promise honest. A browser may list cloud voices too, but this
-      // dashboard only speaks through a Thai voice that declares itself local. If none exists the
-      // selected voice mode remains usable as effects-only rather than sending activity text away.
-      selectedVoice = thai.find((v) => v.localService === true) || null;
+      // dashboard only speaks through a voice that declares itself local. A local Thai voice is
+      // always preferred; without one, the machine's own default voice reads the English phrase
+      // set instead so the voice mode still talks. With no local voice at all it stays effects-only
+      // rather than sending activity text away.
+      const local = voices.filter((v) => v && v.localService === true);
+      selectedVoice = local.find((v) => isThaiLang(v.lang)) || pickFallbackVoice(local);
       emitState();
       return selectedVoice;
+    }
+
+    function voiceIsThai() {
+      return !!selectedVoice && isThaiLang(selectedVoice.lang);
+    }
+
+    function activePhrasePools() {
+      return selectedVoice && !voiceIsThai() ? PHRASE_POOLS_EN : PHRASE_POOLS;
     }
 
     function ensureAudio() {
@@ -623,7 +700,9 @@
         setTimer(drainSpeech, 0);
         return;
       }
-      utterance.lang = "th-TH";
+      // ประโยคถูกเลือกให้ตรงภาษาของ voice ตั้งแต่ตอน announce แล้ว; lang ต้องตรงกันด้วยไม่งั้น
+      // บาง engine จะสลับไปใช้ voice อื่นเงียบ ๆ
+      utterance.lang = voiceIsThai() ? "th-TH" : selectedVoice.lang || "en-US";
       // Full browser volume keeps Thai consonants clear; the slightly synthetic pitch preserves
       // the futuristic character without making every line sound like the same harsh robot.
       utterance.rate = 1.02;
@@ -725,7 +804,12 @@
           speechQueue[speechQueue.length - 1] = {
             ...item,
             kind: "burst",
-            text: phraseFor("burst", {}, (poolKey, pool) => pickPhrase(poolKey, pool, `${item.cueSeed}:burst`)),
+            text: phraseFor(
+              "burst",
+              {},
+              (poolKey, pool) => pickPhrase(poolKey, pool, `${item.cueSeed}:burst`),
+              activePhrasePools(),
+            ),
             priority: PRIORITY.burst,
           };
         }
@@ -761,7 +845,7 @@
 
       const item = {
         kind,
-        text: phraseFor(kind, d, (poolKey, pool) => pickPhrase(poolKey, pool, eventKey)),
+        text: phraseFor(kind, d, (poolKey, pool) => pickPhrase(poolKey, pool, eventKey), activePhrasePools()),
         priority,
         sessionId: d.sessionId || null,
         agentId: d.agentId || null,
