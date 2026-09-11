@@ -127,7 +127,8 @@ A **sub-agent** gets three: `tool ทั้งหมด` (all tools), `ราย
 ### What it shows
 
 - The **core** is the session. Its colour and the mood word in the top-left follow the state:
-  thinking, calling a tool, waiting for permission, spawning agents, blocked, idle.
+  thinking, calling a tool, waiting for sub-agents, waiting for permission, spawning agents,
+  blocked, idle.
 - Each **orbiting light** is a sub-agent; links are drawn as straight lines to its real parent.
 - The **gauges** are FPS, sessions, sub-agents (`running/total`), tools, errors, denials, and a quota
   ring. The quota ring hides itself when there is no quota data at all.
@@ -168,7 +169,8 @@ explicitly **not** treated as a problem, because long silence is the normal sign
 | Status | Evidence |
 | --- | --- |
 | ⚙️ tool | a `tool_use` with no matching `tool_result` yet |
-| 🙋 waiting | that tool has been outstanding for more than **25 s** → probably a permission prompt |
+| 🤖 delegating | the outstanding calls are `Agent`/`Task` calls → the parent is waiting for its sub-agents |
+| 🙋 waiting | an `AskUserQuestion` is outstanding, or a non-agent tool has been outstanding for more than **25 s** → probably a permission prompt |
 | 💭 thinking | no outstanding tool, but the turn has not ended — with a clock |
 | ⛔ blocked | the turn **ended** on an error / `hookErrors` / `toolDenialKind` |
 | 😴 idle | Claude's own `stop_reason` (`end_turn`/`stop_sequence`/`max_tokens`/`refusal`), or a Stop-hook summary record |
@@ -265,7 +267,7 @@ All deliberate. Knowing them stops you from reading a ceiling as a bug.
 | sub-agents tailed | 240 | a bigger fan-out is not fully read |
 | finished sub-agents sent | 24 | running ones are **all** sent; parents of any sent row are pulled back in past the cap, so a deep child is never re-parented onto the session |
 | sub-agent idle timeout | 180 s | when a silent sub-agent is declared dead |
-| permission suspicion | 25 s | when an outstanding tool starts reading as `waiting` |
+| permission suspicion | 25 s | when an outstanding non-agent tool starts reading as `waiting`; `AskUserQuestion` waits immediately |
 | error log | 80 per transcript | so a category's drill-down can show fewer entries than its count |
 | `/api/agent` slice | 200 events / 120 error rows | ceiling of the detail view |
 | text clamps | 8000 / 600 / 600→400 chars | detail text, chips, blob preview |
@@ -310,6 +312,8 @@ Thai → English for everything the interface can put on screen. Grouped by wher
 | กำลังใช้ tool | Using a tool | 3D (same meaning, different wording) |
 | กำลังเรียกเครื่องมือ | Calling a tool | 3D mood word, top-left |
 | กำลังคิด | Thinking | both |
+| รอ sub-agent | Waiting for sub-agents | classic and 3D session status |
+| กำลังทำงานผ่าน sub-agent | Working through sub-agents | 3D mood word |
 | รอเราตอบ / รออนุญาต | Waiting for a reply / for permission | both |
 | รออนุญาต | Waiting for permission | 3D mood word |
 | ติดด่าน / มี error | Blocked / has an error | both |

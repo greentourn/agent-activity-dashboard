@@ -1126,6 +1126,7 @@
       const STATE_TH = {
         tool: "กำลังใช้เครื่องมือ",
         thinking: "กำลังคิด",
+        delegating: "รอ sub-agent",
         waiting: "รอเราตอบ / รออนุญาต",
         blocked: "ติดด่าน / มี error",
         quiet: "กำลังคิด",
@@ -1135,6 +1136,7 @@
       const STATE_ICON = {
         tool: "⚙️",
         thinking: "💭",
+        delegating: "🤖",
         waiting: "🙋",
         blocked: "⛔",
         quiet: "💭",
@@ -2447,7 +2449,7 @@
         const { refs, g } = node;
         const st = a.status.state;
         g.dataset.state = st;
-        g.classList.toggle("run", st === "tool" || st === "thinking");
+        g.classList.toggle("run", st === "tool" || st === "thinking" || st === "delegating");
         g.classList.toggle("done", !a.alive);
         g.style.opacity = a.alive ? "" : "0.5";
         refs.disc.setAttribute("fill", "var(--card-2)");

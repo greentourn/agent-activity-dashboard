@@ -193,7 +193,8 @@ treated as a problem: long silence is the normal signature of thinking.
 | Status | Evidence used to decide it |
 | --- | --- |
 | ⚙️ `tool` | there is a `tool_use` with no matching `tool_result` yet |
-| 🙋 `waiting` | that tool has been outstanding for more than 25 s → probably sitting on a permission prompt |
+| 🤖 `delegating` | the outstanding calls are `Agent`/`Task` calls → the parent is waiting for its sub-agents |
+| 🙋 `waiting` | an `AskUserQuestion` is outstanding, or a non-agent tool has been outstanding for more than 25 s → probably sitting on a permission prompt |
 | 💭 `thinking` | no outstanding tool, but the turn has not ended — shown with a clock of how long it has been thinking |
 | ⛔ `blocked` | the turn **ended** on an error / `hookErrors` / `toolDenialKind` |
 | 😴 `idle` | Claude's own `stop_reason` (`end_turn`/`stop_sequence`/`max_tokens`/`refusal`), or a Stop-hook summary record. The `endedBy` field tells you which piece of evidence was used |

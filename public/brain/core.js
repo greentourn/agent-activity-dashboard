@@ -3,7 +3,7 @@
  *
  * นี่คือตัวละครหลักของหน้านี้: ก้อนพลังงานที่ต้อง "มีชีวิตตลอดเวลา" แม้ระบบไม่มีงานเลย
  * (ข้อกำหนดของผู้ใช้: ตอนรอคำสั่งก็ต้องเคลื่อนไหวเหมือนรอตอบสนอง) และต้องเปลี่ยนบุคลิก
- * ให้เห็นชัดเมื่อบริบทเปลี่ยน — คิด / เรียกเครื่องมือ / รออนุญาต / ถูกบล็อก / แตก agent
+ * ให้เห็นชัดเมื่อบริบทเปลี่ยน — คิด / เรียกเครื่องมือ / รอ sub-agent / รออนุญาต / ถูกบล็อก / แตก agent
  *
  * ชั้นของวัตถุ (เรียงจากในออกนอก):
  *   1. innerCore   ทรงกลมทึบเรืองแสง = แกนจิตสำนึก เต้นตามจังหวะคิด
@@ -33,6 +33,7 @@ const MOOD_PROFILE = {
   idle: { breath: 0.30, warp: 0.38, spin: 0.34, flow: 0.42, glow: 0.68, jitter: 0.0, swirl: 0.12, hue: STATE_HEX.idle },
   thinking: { breath: 0.62, warp: 0.78, spin: 0.62, flow: 0.95, glow: 0.98, jitter: 0.0, swirl: 1.15, hue: STATE_HEX.thinking },
   tool: { breath: 0.92, warp: 0.60, spin: 0.98, flow: 2.30, glow: 1.10, jitter: 0.02, swirl: -0.45, hue: STATE_HEX.tool },
+  delegating: { breath: 0.78, warp: 0.68, spin: 0.84, flow: 1.72, glow: 1.06, jitter: 0.0, swirl: -0.24, hue: STATE_HEX.delegating },
   waiting: { breath: 0.16, warp: 0.30, spin: 0.16, flow: 0.26, glow: 0.60, jitter: 0.35, swirl: 0.0, hue: STATE_HEX.waiting },
   blocked: { breath: 1.30, warp: 1.15, spin: 0.10, flow: 0.30, glow: 1.20, jitter: 0.95, swirl: 0.0, hue: STATE_HEX.blocked },
   spawning: { breath: 1.15, warp: 0.85, spin: 1.25, flow: 2.80, glow: 1.18, jitter: 0.05, swirl: -0.9, hue: SEMANTIC_HEX.spawn },

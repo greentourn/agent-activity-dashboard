@@ -121,6 +121,9 @@
 .hud-overlay[data-mood="tool"] {
   --hud-mood-color: var(--hud-cyan);
 }
+.hud-overlay[data-mood="delegating"] {
+  --hud-mood-color: var(--hud-ok);
+}
 .hud-overlay[data-mood="waiting"] {
   --hud-mood-color: var(--hud-warn);
 }
@@ -523,6 +526,9 @@
 }
 .hud-rail-row-status[data-state="thinking"] {
   color: var(--hud-accent-2);
+}
+.hud-rail-row-status[data-state="delegating"] {
+  color: var(--hud-ok);
 }
 .hud-rail-row-status[data-state="waiting"] {
   color: var(--hud-warn);

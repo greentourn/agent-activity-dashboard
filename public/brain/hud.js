@@ -14,19 +14,21 @@
 // ค่าคงที่ — ข้อความ/สี/ป้าย ที่ไม่เปลี่ยนตามข้อมูล
 // =====================================================================
 
-/** ข้อความไทยของ ctx.mood ("idle"|"thinking"|"tool"|"waiting"|"blocked"|"spawning") */
+/** ข้อความไทยของ ctx.mood ("idle"|"thinking"|"tool"|"delegating"|"waiting"|"blocked"|"spawning") */
 const MOOD_TH = {
   idle: "รอคำสั่ง",
   thinking: "กำลังคิด",
   tool: "กำลังเรียกเครื่องมือ",
+  delegating: "กำลังทำงานผ่าน sub-agent",
   waiting: "รออนุญาต",
   blocked: "ถูกบล็อก",
   spawning: "กำลังแตก agent",
 };
 
-/** ข้อความไทยของ session.status.state ("tool"|"waiting"|"idle"|"blocked"|"thinking"|"unknown") */
+/** ข้อความไทยของ session.status.state ("tool"|"delegating"|"waiting"|"idle"|"blocked"|"thinking"|"unknown") */
 const STATE_TH = {
   tool: "กำลังใช้ tool",
+  delegating: "รอ sub-agent",
   waiting: "รอเราตอบ / รออนุญาต",
   idle: "ว่าง รอคำสั่ง",
   blocked: "ติดด่าน / มี error",
@@ -631,7 +633,7 @@ export function createHud(root, options = {}) {
     const subTotals = a.subTotals || {};
     row.refs.subs.textContent = fmtFraction(subTotals.running, subTotals.total);
 
-    const isBusy = state === "tool" || state === "thinking";
+    const isBusy = state === "tool" || state === "thinking" || state === "delegating";
     let ratio = 0;
     if (subTotals.total > 0) ratio = (subTotals.running || 0) / subTotals.total;
     else if (isBusy) ratio = 1;

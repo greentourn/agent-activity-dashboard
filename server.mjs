@@ -48,8 +48,12 @@ const POLL_MS = 700;
 /** Events kept per session in memory, and how many are shipped to the browser. */
 const EVENT_BUFFER = 400;
 const EVENTS_SENT = 70;
-/** A tool pending this long is probably sitting on a permission prompt. */
+/** A non-delegation tool pending this long is probably sitting on a permission prompt. */
 const PERMISSION_SUSPECT_MS = 25_000;
+/** Agent/Task stay pending for the whole synchronous child run; that means delegation, not consent. */
+const DELEGATION_TOOLS = new Set(["Agent", "Task"]);
+/** This tool is itself proof that the turn is waiting for the user, so it needs no age heuristic. */
+const EXPLICIT_USER_WAIT_TOOL = "AskUserQuestion";
 /**
  * Sub-agents. Claude Code gives every sub-agent its own transcript at
  *   ~/.claude/projects/<slug>/<parentSessionId>/subagents/agent-<agentId>.jsonl
@@ -2207,11 +2211,47 @@ function deriveStatus(tail, now) {
     .sort((a, b) => Date.parse(a.startedTs || 0) - Date.parse(b.startedTs || 0));
 
   if (running.length) {
-    const oldest = running[0];
-    const waited = oldest.startedTs ? now - Date.parse(oldest.startedTs) : 0;
+    /*
+     * Pending tools do not all mean the same kind of wait:
+     *
+     * - AskUserQuestion is direct evidence of a human wait and must surface immediately.
+     * - Agent/Task remain pending while synchronous children work, often for many minutes. Their
+     *   age must NEVER trigger the permission heuristic; an all-delegation set is `delegating`.
+     * - Other tools retain the old >25s permission suspicion.
+     *
+     * Multiple tool_use blocks can be in flight together. A real/suspected user wait wins; an
+     * ordinary active tool wins over concurrent delegation; only delegation calls left means the
+     * parent is waiting on its children. `since` follows the call that caused the chosen state so
+     * an hour-old Agent call cannot make a newly-started Bash look an hour old.
+     */
+    const explicitUserWait = running.find((r) => r.tool === EXPLICIT_USER_WAIT_TOOL);
+    const ordinary = running.filter(
+      (r) => r.tool !== EXPLICIT_USER_WAIT_TOOL && !DELEGATION_TOOLS.has(r.tool),
+    );
+    const permissionSuspect = ordinary.find((r) => {
+      const started = r.startedTs ? Date.parse(r.startedTs) : NaN;
+      return Number.isFinite(started) && now - started > PERMISSION_SUSPECT_MS;
+    });
+
+    let state;
+    let since;
+    if (explicitUserWait) {
+      state = "waiting";
+      since = explicitUserWait.startedTs;
+    } else if (permissionSuspect) {
+      state = "waiting";
+      since = permissionSuspect.startedTs;
+    } else if (ordinary.length) {
+      state = "tool";
+      since = ordinary[0].startedTs;
+    } else {
+      state = "delegating";
+      since = running[0].startedTs;
+    }
+
     return {
-      state: waited > PERMISSION_SUSPECT_MS ? "waiting" : "tool",
-      since: oldest.startedTs,
+      state,
+      since,
       running: running.map((r) => ({
         tool: r.tool,
         icon: r.icon,
@@ -2418,7 +2458,16 @@ function buildSnapshot() {
     });
   }
 
-  const rank = { tool: 0, waiting: 1, thinking: 2, blocked: 3, quiet: 4, idle: 5, unknown: 6 };
+  const rank = {
+    tool: 0,
+    delegating: 1,
+    waiting: 2,
+    thinking: 3,
+    blocked: 4,
+    quiet: 5,
+    idle: 6,
+    unknown: 7,
+  };
   agents.sort((a, b) => {
     if (a.alive !== b.alive) return a.alive ? -1 : 1;
     const byState = (rank[a.status.state] ?? 9) - (rank[b.status.state] ?? 9);
@@ -2432,7 +2481,11 @@ function buildSnapshot() {
     totals: {
       live: agents.filter((a) => a.alive).length,
       busy: agents.filter(
-        (a) => a.alive && (a.status.state === "tool" || a.status.state === "thinking"),
+        (a) =>
+          a.alive &&
+          (a.status.state === "tool" ||
+            a.status.state === "delegating" ||
+            a.status.state === "thinking"),
       ).length,
       waiting: agents.filter((a) => a.alive && a.status.state === "waiting").length,
       subsRunning: agents.reduce((n, a) => n + a.subTotals.running, 0),

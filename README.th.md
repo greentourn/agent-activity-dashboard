@@ -190,7 +190,8 @@ port 7676 ถูกใช้อยู่ — ลองอีกพอร์ต: 
 | สถานะ | หลักฐานที่ใช้ตัดสิน |
 | --- | --- |
 | ⚙️ `tool` | มี `tool_use` ที่ยังไม่มี `tool_result` มาคู่กัน |
-| 🙋 `waiting` | tool ตัวนั้นค้างมาเกิน 25 s แล้ว → น่าจะติดอยู่ที่ permission prompt |
+| 🤖 `delegating` | call ที่ค้างอยู่เป็น `Agent`/`Task` → parent กำลังรอผลจาก sub-agent |
+| 🙋 `waiting` | มี `AskUserQuestion` ค้างอยู่ หรือ tool ที่ไม่ใช่ agent ค้างเกิน 25 s → น่าจะติดอยู่ที่ permission prompt |
 | 💭 `thinking` | ไม่มี tool ค้างอยู่ แต่ turn ยังไม่จบ — ขึ้นนาฬิกาบอกว่าคิดมานานแค่ไหนแล้ว |
 | ⛔ `blocked` | turn **จบ**ลงด้วย error / `hookErrors` / `toolDenialKind` |
 | 😴 `idle` | มาจาก `stop_reason` ของ Claude เอง (`end_turn`/`stop_sequence`/`max_tokens`/`refusal`) หรือจากบันทึกสรุปของ Stop-hook ฟิลด์ `endedBy` จะบอกว่าใช้หลักฐานตัวไหนตัดสิน |

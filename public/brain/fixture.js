@@ -308,6 +308,8 @@ export function createFixture(options = {}) {
   let elapsedMs = 0;
   const BASE_TICK_MS = 700;
   const PERMISSION_SUSPECT_MS = 25_000; // ค่าเดียวกับ server.mjs จริง
+  const DELEGATION_TOOLS = new Set(["Agent", "Task"]);
+  const EXPLICIT_USER_WAIT_TOOL = "AskUserQuestion";
   const EVENTS_SENT = 70;
 
   const logBuf = [];
@@ -944,9 +946,6 @@ export function createFixture(options = {}) {
       return { state: "blocked", since: isoAt(sess.lastTsMs), running: [], endedBy: sess._endedBy || "guard" };
     }
     if (sess._running.length > 0) {
-      const real = sess._running.filter((r) => !r.batchIds);
-      const oldestMs = Math.min(...sess._running.map((r) => r.startedAtMs));
-      const waited = nowVirtualMs() - oldestMs;
       const running = sess._running.map((r) => ({
         tool: r.tool,
         icon: r.icon,
@@ -954,7 +953,30 @@ export function createFixture(options = {}) {
         startedTs: isoAt(r.startedAtMs),
         lane: r.lane || "main",
       }));
-      return { state: waited > PERMISSION_SUSPECT_MS ? "waiting" : "tool", since: isoAt(oldestMs), running };
+      const explicitUserWait = sess._running.find((r) => r.tool === EXPLICIT_USER_WAIT_TOOL);
+      const ordinary = sess._running.filter(
+        (r) => r.tool !== EXPLICIT_USER_WAIT_TOOL && !DELEGATION_TOOLS.has(r.tool),
+      );
+      const permissionSuspect = ordinary.find(
+        (r) => nowVirtualMs() - r.startedAtMs > PERMISSION_SUSPECT_MS,
+      );
+
+      let state;
+      let cause;
+      if (explicitUserWait) {
+        state = "waiting";
+        cause = explicitUserWait;
+      } else if (permissionSuspect) {
+        state = "waiting";
+        cause = permissionSuspect;
+      } else if (ordinary.length) {
+        state = "tool";
+        cause = ordinary[0];
+      } else {
+        state = "delegating";
+        cause = sess._running[0];
+      }
+      return { state, since: isoAt(cause.startedAtMs), running };
     }
     if (sess._phase === "idle") {
       return { state: "idle", since: isoAt(sess.lastTsMs), running: [], endedBy: sess._endedBy || "stop_reason:end_turn" };
@@ -1139,7 +1161,13 @@ export function createFixture(options = {}) {
 
     const totals = {
       live: agentsPublic.filter((a) => a.alive).length,
-      busy: agentsPublic.filter((a) => a.alive && (a.status.state === "tool" || a.status.state === "thinking")).length,
+      busy: agentsPublic.filter(
+        (a) =>
+          a.alive &&
+          (a.status.state === "tool" ||
+            a.status.state === "delegating" ||
+            a.status.state === "thinking"),
+      ).length,
       waiting: agentsPublic.filter((a) => a.alive && a.status.state === "waiting").length,
       subsRunning: agentsPublic.reduce((n, a) => n + a.subTotals.running, 0),
       subsTotal: agentsPublic.reduce((n, a) => n + a.subTotals.total, 0),

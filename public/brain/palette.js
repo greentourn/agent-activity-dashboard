@@ -24,6 +24,7 @@ export const MODEL_HEX = {
  * - idle     = ฟ้าเย็น "หลับตื้น ๆ รอคำสั่ง"
  * - thinking = ม่วง "พลังงานหมุนเข้าใน"
  * - tool     = ฟ้าสว่าง "ยิงพลังงานออก"
+ * - delegating = เขียวอมฟ้า "งานยังวิ่งอยู่ผ่าน sub-agent"
  * - waiting  = เหลืองอำพัน "ค้างรออนุญาต"
  * - blocked  = แดง "ถูกปฏิเสธ"
  */
@@ -31,6 +32,7 @@ export const STATE_HEX = {
   idle: 0x3fb7d6,
   thinking: 0xa371f7,
   tool: 0x58d3ff,
+  delegating: 0x00ffc8,
   waiting: 0xe3b341,
   blocked: 0xff6b6b,
   unknown: 0x6e7681,
@@ -96,7 +98,7 @@ export function css(hex) {
  * moodFromSnapshot — แปลง snapshot ทั้งก้อนให้เหลือ "อารมณ์เดียว" ที่ฉากใช้ขับ animation
  *
  * ลำดับความสำคัญตั้งใจให้เหตุการณ์ที่ผู้ใช้ต้อง "รู้ทันที" ชนะเสมอ:
- *   blocked > waiting > spawning > tool > thinking > idle
+ *   blocked > waiting > spawning > tool > delegating > thinking > idle
  * (ของที่ผิดปกติต้องเด้ง ไม่ใช่ถูกกลบด้วยงานปกติที่วิ่งพร้อมกัน)
  */
 export function moodFromSnapshot(snapshot, opts = {}) {
@@ -105,6 +107,7 @@ export function moodFromSnapshot(snapshot, opts = {}) {
   let blocked = 0;
   let waiting = 0;
   let tool = 0;
+  let delegating = 0;
   let thinking = 0;
   for (const a of snapshot.agents) {
     if (!a || !a.alive || !a.status) continue;
@@ -112,12 +115,14 @@ export function moodFromSnapshot(snapshot, opts = {}) {
     if (s === "blocked") blocked += 1;
     else if (s === "waiting") waiting += 1;
     else if (s === "tool") tool += 1;
+    else if (s === "delegating") delegating += 1;
     else if (s === "thinking") thinking += 1;
   }
   if (blocked > 0) return "blocked";
   if (waiting > 0) return "waiting";
   if (spawnRecent > 0 && spawnRecent < 2.2) return "spawning";
   if (tool > 0) return "tool";
+  if (delegating > 0) return "delegating";
   if (thinking > 0) return "thinking";
   return "idle";
 }
@@ -143,6 +148,7 @@ export const MOOD_LABEL = {
   idle: "รอคำสั่ง",
   thinking: "กำลังคิด",
   tool: "กำลังเรียกเครื่องมือ",
+  delegating: "กำลังทำงานผ่าน sub-agent",
   waiting: "รออนุญาต",
   blocked: "ถูกบล็อก",
   spawning: "กำลังแตก agent",
