@@ -1,5 +1,7 @@
 # Agent Activity Dashboard
 
+![Agent Activity Dashboard — NEURAL CORE มุมมอง 3D ตอนเจอ fan-out storm](docs/images/cover.jpg)
+
 [English](README.md)
 
 **ดูว่า agent ของ Claude Code ทุกตัวบนเครื่องคุณกำลังทำอะไรอยู่จริง ๆ** — กำลังเรียก tool ไหน ไฟล์ไหน
@@ -125,9 +127,10 @@ browser storage เก็บเฉพาะโหมดเสียงกับ�
 เป็นภาษาอังกฤษแทน และถ้าไม่มี voice local เลย เอฟเฟกต์ยังทำงานต่อได้โดยไม่เกิด error voice แบบ cloud
 เช่นชุด "Online (Natural)" ของ Edge จะไม่ถูกใช้
 
-> ⚠️ มีสองเรื่องที่ควรรู้ไว้: `--open` จะเปิดมุมมอง **classic** เสมอ และมุมมอง classic เอง**ไม่มีลิงก์**
-> ไปหามุมมอง 3D เลย — แต่ server พิมพ์ URL ของทั้งสองมุมมองไว้ใน banner ตอนเริ่มรัน เปิด `/brain.html`
-> จากตรงนั้นได้เลย ส่วนมุมมอง 3D มีลิงก์ `← หน้าคลาสสิก` อยู่ที่แถบควบคุมมุมขวาล่างให้
+> ⚠️ มีสองเรื่องที่ควรรู้ไว้: `--open` จะเปิด **NEURAL CORE** (มุมมอง 3D) เสมอ และมุมมอง classic เอง
+> **ไม่มีลิงก์**ไปหามุมมอง 3D เลย — แต่ server พิมพ์ URL ของทั้งสองมุมมองไว้ใน banner ตอนเริ่มรัน เลือกเปิด
+> จากตรงนั้นได้เลย ส่วนมุมมอง 3D มีลิงก์ `← หน้าคลาสสิก` อยู่ที่แถบควบคุมมุมขวาล่างให้ และถ้าเบราว์เซอร์ไม่มี WebGL
+> มันจะโชว์ลิงก์เดียวกันนี้ให้เอง
 
 ---
 
@@ -161,7 +164,7 @@ fixture ของ classic เรนเดอร์**ครั้งเดีย�
 node server.mjs [options]
 
   --port, -p <n>         port to listen on (default 7676)
-  --open, -o             open the dashboard in your browser
+  --open, -o             open NEURAL CORE (the 3D view) in your browser
   --stale-minutes <n>    keep a finished session on screen this long (default 30)
 
   --live-usage           fetch the REAL session/weekly % from Anthropic instead of the

@@ -31,9 +31,10 @@ in whatever language you and your agents work in.
 | Needs WebGL | no | **yes** |
 | Data source | the same `/api/stream` SSE feed | the same `/api/stream` SSE feed |
 
-`--open` always opens the **classic** view. There is no link from the classic view to the 3D one —
-the server prints both URLs in its startup banner, so open the `/brain.html` one from there. The
-3D view has a `← หน้าคลาสสิก` ("classic view") link in its bottom-right control bar.
+`--open` always opens **NEURAL CORE** (the 3D view). There is no link from the classic view to the
+3D one — the server prints both URLs in its startup banner, so pick from there. The 3D view has a
+`← หน้าคลาสสิก` ("classic view") link in its bottom-right control bar, and shows that same link on
+its own when the browser has no WebGL.
 
 ---
 

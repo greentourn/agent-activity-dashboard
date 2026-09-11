@@ -172,7 +172,7 @@ if (ARGS.help) {
       "  node server.mjs [options]",
       "",
       "  --port, -p <n>         port to listen on (default 7676)",
-      "  --open, -o             open the dashboard in your browser",
+      "  --open, -o             open NEURAL CORE (the 3D view) in your browser",
       "  --stale-minutes <n>    keep a finished session on screen this long (default 30)",
       "",
       "  --live-usage           fetch the REAL session/weekly % from Anthropic instead of the",
@@ -2704,12 +2704,15 @@ server.on("error", (err) => {
 
 server.listen(ARGS.port, "127.0.0.1", () => {
   const url = `http://127.0.0.1:${ARGS.port}`;
+  // `--open` launches the 3D view. brain.html falls back to a "← กลับไปหน้าคลาสสิก" link on its own
+  // when WebGL is unavailable, so defaulting to it never strands anyone.
+  const openUrl = `${url}/brain.html`;
   // Both views come off this one server, but the classic page has no link to the 3D one — so
-  // list both URLs here, where the person choosing is actually looking. `--open` still goes to
-  // the classic view; the second line is there to be clicked/copied.
+  // list both URLs here, where the person choosing is actually looking. The one `--open`
+  // launches goes first; the other line is there to be clicked/copied.
   process.stdout.write(`\n  Agent Activity Dashboard\n`);
+  process.stdout.write(`    NEURAL CORE (3D)  → ${openUrl}\n`);
   process.stdout.write(`    Classic (2D)      → ${url}/\n`);
-  process.stdout.write(`    NEURAL CORE (3D)  → ${url}/brain.html\n`);
   process.stdout.write(`  watching ${SESSIONS_DIR}\n`);
   process.stdout.write(`         + ${PROJECTS_DIR}\n`);
   // Say out loud whether the credential-reading path is armed. A flag that silently starts
@@ -2723,10 +2726,10 @@ server.listen(ARGS.port, "127.0.0.1", () => {
   if (ARGS.open) {
     const opener =
       process.platform === "win32"
-        ? ["cmd", ["/c", "start", "", url]]
+        ? ["cmd", ["/c", "start", "", openUrl]]
         : process.platform === "darwin"
-          ? ["open", [url]]
-          : ["xdg-open", [url]];
+          ? ["open", [openUrl]]
+          : ["xdg-open", [openUrl]];
     try {
       spawn(opener[0], opener[1], { detached: true, stdio: "ignore" }).unref();
     } catch {

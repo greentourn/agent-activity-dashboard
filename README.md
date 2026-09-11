@@ -1,5 +1,7 @@
 # Agent Activity Dashboard
 
+![Agent Activity Dashboard — NEURAL CORE, the 3D view, mid fan-out storm](docs/images/cover.jpg)
+
 **See what every Claude Code agent on your machine is actually doing** — which tool, which file,
 for how long — down to every sub-agent it spawned, on every surface: the CLI, the VS Code
 extension, the desktop app, and background (`--bg`) sessions.
@@ -129,10 +131,10 @@ preferred; if none is installed, the machine's default local voice speaks the sa
 instead, and if there is no local voice at all, effects continue without an error. Cloud voices such
 as Edge's "Online (Natural)" set are never used.
 
-> ⚠️ Two things to know: `--open` always opens the **classic** view, and the classic view has **no
-> link** to the 3D one — the server prints both URLs in its startup banner, so open the
-> `/brain.html` one from there. The 3D view does have a `← หน้าคลาสสิก` ("back to classic") link
-> in its bottom-right control bar.
+> ⚠️ Two things to know: `--open` always opens **NEURAL CORE** (the 3D view), and the classic view
+> has **no link** to the 3D one — the server prints both URLs in its startup banner, so pick from
+> there. The 3D view does have a `← หน้าคลาสสิก` ("back to classic") link in its bottom-right
+> control bar, and it shows that same link on its own if your browser has no WebGL.
 
 ---
 
@@ -167,7 +169,7 @@ appears in fixture mode.
 node server.mjs [options]
 
   --port, -p <n>         port to listen on (default 7676)
-  --open, -o             open the dashboard in your browser
+  --open, -o             open NEURAL CORE (the 3D view) in your browser
   --stale-minutes <n>    keep a finished session on screen this long (default 30)
 
   --live-usage           fetch the REAL session/weekly % from Anthropic instead of the
