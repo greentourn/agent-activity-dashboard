@@ -1060,6 +1060,7 @@
 .hud-controls {
   flex: 0 0 300px;
   width: 300px;
+  min-width: 0;
   /*
    * เดิม height ตายตัว var(--hud-feed-h)=112px แต่เนื้อหาจริง (คุณภาพ 1 แถว + หมุนอัตโนมัติ + รีเซ็ต +
    * [ทดสอบฉาก เฉพาะ fixtureMode] + ลิงก์คลาสสิก) ต้องการ ~160-200px เสมอ ทำให้ scrollbar ขึ้นทุกครั้ง
@@ -1080,6 +1081,7 @@
   align-items: center;
   gap: 5px;
   width: 100%;
+  min-width: 0;
 }
 .hud-controls-caption {
   font-size: 10px;
@@ -1116,6 +1118,7 @@
 
 .hud-btn-quality {
   flex: 1 1 0;
+  min-width: 0;
   text-align: center;
 }
 
@@ -1125,31 +1128,88 @@
   text-align: center;
 }
 
-/* สวิตช์เสียงใช้สกินร่วมกับหน้า Classic แต่จัดสัดส่วนให้พอดีกับแผงควบคุมของ Neural */
-.hud-btn-voice {
-  --agent-voice-accent: var(--hud-mood-color);
-  --agent-voice-text: var(--hud-text-dim);
-  --agent-voice-bg: rgba(255, 255, 255, 0.04);
-  width: 100%;
-  min-height: 31px;
-  justify-content: flex-start;
+/* เสียงมี 3 โหมดที่อ่านออกทันที แทน toggle เดิมซึ่งบอกไม่ได้ว่าเปิดเฉพาะเอฟเฟกต์หรือเสียงพูด */
+.hud-audio-controls {
+  align-items: stretch;
 }
-.hud-btn-voice .hud-voice-label {
+.hud-audio-controls .hud-controls-caption {
+  align-self: center;
+}
+.hud-audio-mode-group {
   flex: 1 1 auto;
   min-width: 0;
-  text-align: left;
+  display: grid;
+  grid-template-columns: 0.72fr 1fr 1.65fr;
+  gap: 4px;
 }
-.hud-btn-voice .agent-voice-meter {
+.hud-btn-audio-mode {
+  position: relative;
+  min-width: 0;
+  min-height: 31px;
+  padding: 5px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 9.5px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.hud-btn-audio-mode[data-audio-mode="off"].hud-btn--active {
+  color: var(--hud-text);
+  border-color: var(--hud-border-strong);
+  background: rgba(255, 255, 255, 0.09);
+}
+.hud-btn-audio-mode[data-audio-mode="effects"].hud-btn--active,
+.hud-btn-audio-mode[data-audio-mode="voice"].hud-btn--active {
+  color: var(--hud-bg);
+  border-color: var(--hud-mood-color);
+  background: var(--hud-mood-color);
+}
+.hud-btn-audio-mode .agent-voice-meter {
   flex: 0 0 auto;
+  width: 12px;
+  gap: 1px;
 }
-.hud-btn-voice.has-live-level .agent-voice-meter > i {
+.hud-btn-audio-mode .agent-voice-meter > i {
+  width: 2px;
+}
+.hud-btn-audio-mode:not(.hud-btn--active) .agent-voice-meter {
+  opacity: 0.45;
+}
+.hud-btn-audio-mode.has-live-level .agent-voice-meter > i {
   height: var(--voice-meter-height, 3px);
   animation: none;
   transition: height 70ms linear;
 }
-.hud-btn-voice:disabled {
+.hud-btn-audio-mode.is-speaking {
+  color: #06131b;
+  box-shadow: 0 0 16px rgba(125, 249, 255, 0.45), inset 0 0 10px rgba(255, 255, 255, 0.22);
+}
+.hud-btn-audio-mode.is-cue {
+  animation: hud-audio-cue 0.26s ease-out;
+}
+.hud-btn-audio-mode:disabled,
+.hud-btn-reminders:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+.hud-btn-reminders {
+  width: 100%;
+  min-height: 30px;
+  text-align: center;
+}
+.hud-btn-reminders--dormant {
+  opacity: 0.62;
+  color: var(--hud-text-dim);
+  border-color: var(--hud-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@keyframes hud-audio-cue {
+  0% { transform: scale(0.96); }
+  48% { transform: scale(1.045); box-shadow: 0 0 18px color-mix(in srgb, var(--hud-mood-color) 55%, transparent); }
+  100% { transform: scale(1); }
 }
 
 .hud-scenario {
@@ -1329,10 +1389,23 @@
   .hud-controls {
     flex: 0 0 auto;
     width: auto;
+    max-width: 100%;
     max-height: 34vh;
   }
   .hud-controls-group {
     flex-wrap: wrap;
+  }
+}
+
+/* โทรศัพท์แนวตั้ง: ให้ตัวเลือกเสียงกินเต็มแถว ป้องกันป้ายไทยยาวเบียดหรือหลุดขอบจอ */
+@media (max-width: 520px) {
+  .hud-audio-controls .hud-controls-caption {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+  .hud-audio-mode-group {
+    flex: 1 0 100%;
+    grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr) minmax(0, 1.65fr);
   }
 }
 

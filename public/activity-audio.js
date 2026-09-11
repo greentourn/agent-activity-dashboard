@@ -9,12 +9,18 @@
 (function installAgentActivityAudio(root) {
   "use strict";
 
+  // Keep the original key so an existing "1" opt-in migrates to the new voice mode.
   const STORAGE_KEY = "agent-activity-dashboard.ai-voice.v1";
+  const REMINDERS_STORAGE_KEY = "agent-activity-dashboard.ai-wait-reminders.v1";
   const EVENT_TTL_MS = 12_000;
   const QUEUE_TTL_MS = 10_000;
   const MAX_SPEECH_QUEUE = 4;
   const SAME_PHRASE_COOLDOWN_MS = 1_800;
   const MAX_SEEN_KEYS = 600;
+  const REMINDER_EFFECT_MS = 30_000;
+  const REMINDER_SPEECH_MS = 90_000;
+  const REMINDER_REPEAT_MS = 120_000;
+  const AUDIO_MODES = new Set(["off", "effects", "voice"]);
   const DELEGATION_TOOLS = new Set(["Agent", "Task"]);
 
   const PRIORITY = {
@@ -33,6 +39,7 @@
     "session-start": 35,
     "session-end": 38,
     burst: 34,
+    reminder: 94,
   };
 
   const CUE_FREQUENCY = {
@@ -51,7 +58,63 @@
     "session-start": 640,
     "session-end": 480,
     burst: 700,
+    reminder: 980,
   };
+
+  // Only these semantic edges are worth interrupting the room with speech. Every event still
+  // receives its own earcon in both audible modes.
+  const SPOKEN_KINDS = new Set([
+    "ready",
+    "prompt",
+    "spawn",
+    "finish",
+    "error",
+    "denied",
+    "blocked",
+    "session-start",
+    "session-end",
+    "burst",
+    "reminder",
+  ]);
+
+  const PHRASE_POOLS = Object.freeze({
+    ready: ["ระบบเสียงพร้อมแล้ว", "พร้อมแจ้งความคืบหน้าแล้ว", "เปิดเสียงกิจกรรมแล้ว"],
+    prompt: ["รับงานใหม่แล้ว", "เริ่มงานใหม่แล้ว", "รับเรื่องแล้ว กำลังเริ่มทำงาน"],
+    thinking: ["กำลังคิดอยู่", "กำลังวิเคราะห์งาน", "ขอคิดสักครู่"],
+    say: ["กำลังเตรียมคำตอบ", "กำลังสรุปคำตอบ", "ใกล้ได้คำตอบแล้ว"],
+    "tool-read": ["กำลังอ่านข้อมูล", "กำลังตรวจข้อมูล", "กำลังเปิดดูรายละเอียด"],
+    "tool-search": ["กำลังค้นหาข้อมูล", "กำลังไล่หาข้อมูล", "กำลังตรวจหาสิ่งที่เกี่ยวข้อง"],
+    "tool-edit": ["กำลังแก้ไขไฟล์", "กำลังปรับงานให้", "กำลังลงมือแก้ไข"],
+    "tool-command": ["กำลังประมวลผลคำสั่ง", "กำลังทำขั้นตอนถัดไป", "กำลังรันงานที่จำเป็น"],
+    "tool-web": ["กำลังค้นข้อมูลจากเว็บ", "กำลังตรวจข้อมูลออนไลน์", "กำลังเปิดดูข้อมูลจากเว็บ"],
+    "tool-question": ["มีคำถามรอคุณตอบ", "ต้องการคำตอบจากคุณเพื่อทำต่อ", "พร้อมทำต่อเมื่อคุณตอบ"],
+    "tool-service": ["กำลังติดต่อบริการที่เกี่ยวข้อง", "กำลังเรียกข้อมูลจากบริการอื่น", "กำลังประสานงานกับบริการภายนอก"],
+    "tool-generic": ["กำลังทำขั้นตอนหนึ่งอยู่", "กำลังจัดการงานต่อ", "กำลังประมวลผลงาน"],
+    "tool-end": ["ขั้นตอนนี้เสร็จแล้ว", "ทำขั้นตอนนี้เรียบร้อยแล้ว", "ดำเนินการส่วนนี้เสร็จแล้ว"],
+    "tool-error": ["ขั้นตอนนี้มีปัญหา", "พบข้อผิดพลาดในขั้นตอนนี้", "ขั้นตอนนี้ยังไม่สำเร็จ"],
+    spawn: ["เรียกผู้ช่วยเพิ่มแล้ว", "ส่งงานให้ผู้ช่วยแล้ว", "มีผู้ช่วยเข้ามาช่วยทำงานแล้ว"],
+    "spawn-many": ["เรียกผู้ช่วยเพิ่มแล้ว", "แบ่งงานให้ผู้ช่วยหลายคนแล้ว", "มีผู้ช่วยหลายคนกำลังช่วยทำงาน"],
+    "finish-ok": ["ผู้ช่วยทำงานเสร็จแล้ว", "ได้รับผลจากผู้ช่วยแล้ว", "งานที่ให้ผู้ช่วยทำเรียบร้อยแล้ว"],
+    "finish-failed": ["ผู้ช่วยทำงานไม่สำเร็จ", "งานที่ส่งให้ผู้ช่วยมีปัญหา", "ยังไม่ได้ผลจากผู้ช่วยตามที่ต้องการ"],
+    "finish-unknown": ["ผู้ช่วยหยุดทำงานแล้ว", "งานของผู้ช่วยสิ้นสุดแล้ว", "ผู้ช่วยออกจากงานนี้แล้ว"],
+    error: ["พบข้อผิดพลาดในการทำงาน", "มีบางอย่างผิดพลาด", "งานส่วนนี้เจอปัญหา"],
+    denied: ["คำสั่งนี้ไม่ได้รับอนุญาต", "ขั้นตอนนี้ถูกปฏิเสธ", "ยังทำขั้นตอนนี้ต่อไม่ได้"],
+    blocked: ["การทำงานติดขัด", "งานนี้ถูกหยุดไว้", "มีสิ่งกีดขวางการทำงาน"],
+    "session-start": ["มีงานใหม่เข้ามา", "เริ่มดูแลงานใหม่แล้ว", "ตรวจพบงานใหม่"],
+    "session-end": ["งานหนึ่งจบแล้ว", "ปิดงานหนึ่งรายการแล้ว", "มีงานเสร็จสมบูรณ์แล้ว"],
+    burst: ["กำลังจัดการหลายขั้นตอน", "มีหลายอย่างเกิดขึ้นพร้อมกัน", "กำลังรวบงานหลายส่วนให้ทัน"],
+    "state-thinking": ["กำลังคิดอยู่", "กำลังวิเคราะห์ต่อ", "กำลังทบทวนข้อมูล"],
+    "state-tool": ["กำลังลงมือทำงาน", "กำลังทำขั้นตอนถัดไป", "กำลังประมวลผลงาน"],
+    "state-delegating": ["กำลังรอผลจากผู้ช่วย", "ผู้ช่วยกำลังทำงานอยู่", "ส่งงานให้ผู้ช่วยแล้ว กำลังรอผล"],
+    "state-wait-question": ["มีคำถามรอคุณตอบ", "ต้องการคำตอบจากคุณเพื่อทำต่อ", "พร้อมทำต่อเมื่อคุณตอบ"],
+    "state-wait-confirm": ["มีขั้นตอนรอให้คุณตรวจสอบ", "มีรายการรอการยืนยันจากคุณ", "ต้องการให้คุณตรวจสอบก่อนทำต่อ"],
+    "state-wait-generic": ["มีงานรอคุณอยู่", "ต้องการความช่วยเหลือจากคุณเพื่อทำต่อ", "พร้อมทำต่อเมื่อคุณกลับมา"],
+    "state-idle": ["งานรอบนี้เรียบร้อยแล้ว", "ทำงานส่วนนี้เสร็จแล้ว", "ตอนนี้ว่างและพร้อมรับงานต่อ"],
+    "reminder-question": ["ยังมีคำถามรอคุณตอบอยู่", "อย่าลืมกลับมาตอบคำถามนะ", "มีงานที่ต้องการคำตอบจากคุณ"],
+    "reminder-confirm": ["ยังมีขั้นตอนรอให้คุณตรวจสอบ", "อย่าลืมกลับมายืนยันงานที่รออยู่", "มีรายการรอการตรวจสอบจากคุณ"],
+    "reminder-generic": ["ยังมีงานรอคุณอยู่", "อย่าลืมกลับมาดูงานที่รออยู่", "มีงานพร้อมทำต่อเมื่อคุณกลับมา"],
+    "reminder-many": ["มีหลายงานกำลังรอคุณอยู่", "ยังมีหลายงานที่ต้องการคำตอบจากคุณ", "อย่าลืมกลับมาดูงานที่รออยู่หลายรายการ"],
+  });
 
   function safeCall(fn, ...args) {
     if (typeof fn !== "function") return;
@@ -69,6 +132,16 @@
       // localStorage can throw merely by reading the property in sandboxed/privacy contexts.
       return undefined;
     }
+  }
+
+  function stableHash(value) {
+    const text = String(value || "");
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
   }
 
   function finiteMs(value, fallback) {
@@ -104,56 +177,63 @@
     return out;
   }
 
-  function toolPhrase(tool, ended, failed) {
-    if (failed) return "พบข้อผิดพลาดจากเครื่องมือ";
-    if (ended) return "เครื่องมือทำงานเสร็จแล้ว";
+  function toolPhraseKey(tool, ended, failed) {
+    if (failed) return "tool-error";
+    if (ended) return "tool-end";
     const name = String(tool || "");
-    if (DELEGATION_TOOLS.has(name)) return "กำลังเรียกซับเอเจนต์";
-    if (name === "Read") return "กำลังอ่านข้อมูล";
-    if (name === "Grep" || name === "Glob" || name === "ToolSearch") return "กำลังค้นหาข้อมูล";
+    if (DELEGATION_TOOLS.has(name)) return "spawn";
+    if (name === "Read") return "tool-read";
+    if (name === "Grep" || name === "Glob" || name === "ToolSearch") return "tool-search";
     if (name === "Edit" || name === "MultiEdit" || name === "Write" || name === "NotebookEdit") {
-      return "กำลังแก้ไขไฟล์";
+      return "tool-edit";
     }
-    if (name === "Bash" || name === "PowerShell") return "กำลังรันคำสั่ง";
-    if (name === "WebFetch" || name === "WebSearch") return "กำลังค้นข้อมูลจากเว็บ";
-    if (name === "AskUserQuestion") return "ต้องการคำตอบจากคุณ";
-    if (name.startsWith("mcp__")) return "กำลังเรียกบริการภายนอก";
-    return "กำลังใช้เครื่องมือ";
+    if (name === "Bash" || name === "PowerShell") return "tool-command";
+    if (name === "WebFetch" || name === "WebSearch") return "tool-web";
+    if (name === "AskUserQuestion") return "tool-question";
+    if (name.startsWith("mcp__")) return "tool-service";
+    return "tool-generic";
   }
 
-  function phraseFor(kind, detail) {
+  function phraseKeyFor(kind, detail) {
     const d = detail || {};
-    if (d.textOverride) return String(d.textOverride);
-    if (kind === "ready") return "ระบบเสียงพร้อมทำงาน";
-    if (kind === "prompt") return "รับคำสั่งใหม่แล้ว";
-    if (kind === "thinking") return "กำลังคิด";
-    if (kind === "say") return "กำลังตอบ";
-    if (kind === "tool-start") return toolPhrase(d.tool, false, false);
-    if (kind === "tool-end") return toolPhrase(d.tool, true, !!d.error);
-    if (kind === "spawn") {
-      const count = Math.max(1, Number(d.count) || 1);
-      return count > 1 ? `เริ่มซับเอเจนต์ ${count} ตัว` : "เริ่มซับเอเจนต์";
-    }
+    if (kind === "ready" || kind === "prompt" || kind === "thinking" || kind === "say") return kind;
+    if (kind === "tool-start") return toolPhraseKey(d.tool, false, false);
+    if (kind === "tool-end") return toolPhraseKey(d.tool, true, !!d.error);
+    if (kind === "spawn") return Math.max(1, Number(d.count) || 1) > 1 ? "spawn-many" : "spawn";
     if (kind === "finish") {
-      if (d.ok === false) return "ซับเอเจนต์ทำงานไม่สำเร็จ";
-      if (d.ok == null) return "ซับเอเจนต์สิ้นสุดการทำงาน";
-      return "ซับเอเจนต์ทำงานเสร็จแล้ว";
+      if (d.ok === false) return "finish-failed";
+      if (d.ok == null) return "finish-unknown";
+      return "finish-ok";
     }
-    if (kind === "error") return "พบข้อผิดพลาดในการทำงาน";
-    if (kind === "denied") return "คำสั่งถูกปฏิเสธ";
-    if (kind === "blocked") return "การทำงานถูกบล็อก";
-    if (kind === "session-start") return "เริ่มเซสชันใหม่";
-    if (kind === "session-end") return "เซสชันจบแล้ว";
-    if (kind === "burst") return "มีหลายเหตุการณ์กำลังทำงาน";
+    if (["error", "denied", "blocked", "session-start", "session-end", "burst"].includes(kind)) return kind;
+    if (kind === "reminder") {
+      if ((Number(d.waitingCount) || 0) > 1) return "reminder-many";
+      if (d.waitingKind === "question") return "reminder-question";
+      if (d.waitingKind === "confirmation") return "reminder-confirm";
+      return "reminder-generic";
+    }
     if (kind === "state") {
-      if (d.state === "thinking") return "กำลังคิด";
-      if (d.state === "tool") return "กำลังใช้เครื่องมือ";
-      if (d.state === "delegating") return "กำลังรอผลจากซับเอเจนต์";
-      if (d.state === "waiting") return "กำลังรอการอนุญาต";
-      if (d.state === "blocked") return "การทำงานถูกบล็อก";
-      if (d.state === "idle") return "งานเสร็จแล้ว";
+      if (d.state === "waiting") {
+        if ((Number(d.waitingCount) || 0) > 1) return "reminder-many";
+        if (d.waitingKind === "question") return "state-wait-question";
+        if (d.waitingKind === "confirmation") return "state-wait-confirm";
+        return "state-wait-generic";
+      }
+      const stateKey = `state-${d.state || ""}`;
+      if (PHRASE_POOLS[stateKey]) return stateKey;
+      if (d.state === "blocked") return "blocked";
     }
     return "";
+  }
+
+  function phraseFor(kind, detail, choose) {
+    const d = detail || {};
+    if (d.textOverride) return String(d.textOverride);
+    const poolKey = phraseKeyFor(kind, d);
+    if (!poolKey) return "";
+    const pool = PHRASE_POOLS[poolKey] || [];
+    if (!pool.length) return "";
+    return typeof choose === "function" ? choose(poolKey, pool) : pool[0];
   }
 
   function semanticFromRaw(ev, base, fallbackNow) {
@@ -204,12 +284,18 @@
     const setEvery = opts.setInterval || env.setInterval.bind(env);
     const clearEvery = opts.clearInterval || env.clearInterval.bind(env);
     const key = opts.storageKey || STORAGE_KEY;
+    const remindersKey = opts.remindersStorageKey || REMINDERS_STORAGE_KEY;
 
-    let enabled = false;
+    let mode = "off";
+    let remindersEnabled = true;
     try {
-      enabled = !!(storage && storage.getItem(key) === "1");
+      const storedMode = storage && storage.getItem(key);
+      mode = storedMode === "1" ? "voice" : AUDIO_MODES.has(storedMode) ? storedMode : "off";
+      const storedReminders = storage && storage.getItem(remindersKey);
+      remindersEnabled = storedReminders == null ? true : storedReminders !== "0" && storedReminders !== "false";
     } catch {
-      enabled = false;
+      mode = "off";
+      remindersEnabled = true;
     }
 
     let disposed = false;
@@ -218,6 +304,7 @@
     let latestSnapshot = null;
     let audioCtx = null;
     let masterGain = null;
+    let limiter = null;
     let cueCursor = 0;
     let currentUtterance = null;
     let currentSpeech = null;
@@ -226,21 +313,43 @@
     let pulseTimer = null;
     let speechWatchdog = null;
     let selectedVoice = null;
+    let voicesResolved = false;
     let sequence = 0;
     let stateTransitionSequence = 0;
+    let phraseSequence = 0;
+    let reminderSequence = 0;
+    let reminderStartedAt = 0;
+    let nextReminderAt = 0;
+    let reminderTimer = null;
     let level = 0;
     const sessions = new Map();
     const seenKeys = new Map();
     const lastPhraseAt = new Map();
+    const lastPhraseChoice = new Map();
+    const waitingSessions = new Map();
     const activeOscillators = new Set();
 
-    const supported = !!(AudioCtor || (speech && Utterance));
+    const effectsSupported = !!AudioCtor;
+    const speechSupported = !!(speech && Utterance);
+    const supported = effectsSupported || speechSupported;
+
+    function enabled() {
+      return mode !== "off";
+    }
 
     function publicState() {
       return {
-        enabled,
+        mode,
+        enabled: enabled(),
+        effectsEnabled: mode !== "off",
+        voiceEnabled: mode === "voice",
+        remindersEnabled,
         unlocked,
         supported,
+        effectsSupported,
+        speechSupported,
+        voiceAvailable: !!selectedVoice,
+        voicesResolved,
         speaking: !!currentSpeech,
         level,
         voiceName: selectedVoice ? selectedVoice.name || "" : "",
@@ -285,16 +394,34 @@
       }
     }
 
+    function pickPhrase(poolKey, pool, seed) {
+      if (!pool.length) return "";
+      const previous = lastPhraseChoice.get(poolKey);
+      let index = stableHash(`${seed || poolKey}:${++phraseSequence}`) % pool.length;
+      if (pool.length > 1 && index === previous) index = (index + 1) % pool.length;
+      lastPhraseChoice.set(poolKey, index);
+      return pool[index];
+    }
+
     function chooseVoice() {
-      if (!speech || typeof speech.getVoices !== "function") return null;
+      if (!speech || typeof speech.getVoices !== "function") {
+        voicesResolved = true;
+        selectedVoice = null;
+        emitState();
+        return null;
+      }
       let voices = [];
       try {
         voices = speech.getVoices() || [];
       } catch {
         voices = [];
       }
+      voicesResolved = voices.length > 0;
       const thai = voices.filter((v) => /^th(?:-|_)/i.test(String(v.lang || "")));
-      selectedVoice = thai.find((v) => v.localService) || thai[0] || null;
+      // Keep the privacy/offline promise honest. A browser may list cloud voices too, but this
+      // dashboard only speaks through a Thai voice that declares itself local. If none exists the
+      // selected voice mode remains usable as effects-only rather than sending activity text away.
+      selectedVoice = thai.find((v) => v.localService === true) || null;
       emitState();
       return selectedVoice;
     }
@@ -304,8 +431,24 @@
       try {
         audioCtx = new AudioCtor();
         masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.34;
-        masterGain.connect(audioCtx.destination);
+        masterGain.gain.value = 0.92;
+        if (typeof audioCtx.createDynamicsCompressor === "function") {
+          try {
+            limiter = audioCtx.createDynamicsCompressor();
+            limiter.threshold.value = -14;
+            limiter.knee.value = 5;
+            limiter.ratio.value = 12;
+            limiter.attack.value = 0.002;
+            limiter.release.value = 0.14;
+            limiter.connect(audioCtx.destination);
+            masterGain.connect(limiter);
+          } catch {
+            limiter = null;
+            masterGain.connect(audioCtx.destination);
+          }
+        } else {
+          masterGain.connect(audioCtx.destination);
+        }
       } catch {
         audioCtx = null;
         masterGain = null;
@@ -373,28 +516,64 @@
       cueCursor = 0;
     }
 
-    function playCue(item, tail) {
-      if (!enabled || !unlocked) return;
+    function playCue(item) {
+      if (!enabled() || !unlocked) return;
       resumeAudio();
       const ctx = ensureAudio();
       if (!ctx) return;
-      const base = CUE_FREQUENCY[item.kind] || 640;
-      const urgent = item.priority >= 90;
+      const cueKind = item.kind === "state" ? `state-${item.state || "generic"}` : item.kind;
+      const seed = item.cueSeed || `${cueKind}:${item.sessionId || "global"}:${item.agentId || "main"}`;
+      const variation = 0.985 + (stableHash(seed) % 31) / 1000;
+      const base = (CUE_FREQUENCY[item.kind] || 640) * variation;
       let at = Math.max(ctx.currentTime + 0.005, cueCursor);
       // ไม่ปล่อย event storm จอง timeline เสียงยาวเป็นนาที — 0.75s คือคิว cue สูงสุด
       if (at - ctx.currentTime > 0.75) at = ctx.currentTime + 0.05;
-      cueCursor = at + 0.055;
-      if (tail) {
-        tone(base * 1.15, at, 0.09, "triangle", 0.022, base * 0.72);
-      } else if (urgent) {
-        tone(base, at, 0.16, "sawtooth", 0.045, Math.max(70, base * 0.55));
-        tone(base * 1.5, at + 0.08, 0.11, "square", 0.025, base);
-      } else if (item.kind === "spawn") {
-        tone(base, at, 0.07, "square", 0.025, base * 1.18);
-        tone(base * 1.35, at + 0.065, 0.08, "triangle", 0.024, base * 1.75);
+      cueCursor = at + 0.075;
+      const chirp = (ratio, delay, duration, type, volume, endRatio) =>
+        tone(base * ratio, at + delay, duration, type, volume, endRatio ? base * endRatio : undefined);
+
+      if (cueKind === "reminder" || cueKind === "state-waiting") {
+        // Three separated notes are deliberately recognisable as "come back to me".
+        chirp(0.92, 0, 0.11, "sine", 0.1, 1.08);
+        chirp(1.24, 0.13, 0.11, "triangle", 0.09, 1.36);
+        chirp(1.62, 0.28, 0.16, "sine", 0.11, 1.42);
+      } else if (cueKind === "error" || cueKind === "blocked") {
+        chirp(1.16, 0, 0.2, "sawtooth", 0.12, 0.5);
+        chirp(0.72, 0.1, 0.18, "square", 0.075, 0.42);
+      } else if (cueKind === "denied") {
+        chirp(0.72, 0, 0.09, "square", 0.1, 0.62);
+        chirp(0.72, 0.13, 0.09, "square", 0.1, 0.58);
+      } else if (cueKind === "prompt" || cueKind === "session-start") {
+        chirp(0.82, 0, 0.09, "triangle", 0.07, 1.08);
+        chirp(1.22, 0.08, 0.11, "sine", 0.075, 1.55);
+      } else if (cueKind === "thinking" || cueKind === "state-thinking") {
+        chirp(0.82, 0, 0.12, "sine", 0.052, 0.98);
+      } else if (cueKind === "say") {
+        chirp(0.9, 0, 0.07, "triangle", 0.055, 1.22);
+        chirp(1.38, 0.06, 0.07, "sine", 0.05, 1.24);
+      } else if (cueKind === "tool-start" || cueKind === "state-tool") {
+        chirp(1.15, 0, 0.055, "square", 0.07, 0.86);
+        chirp(0.82, 0.055, 0.065, "triangle", 0.05, 1.04);
+      } else if (cueKind === "tool-end") {
+        chirp(0.86, 0, 0.075, "triangle", 0.055, 1.12);
+        chirp(1.34, 0.065, 0.095, "sine", 0.07, 1.58);
+      } else if (cueKind === "spawn" || cueKind === "state-delegating") {
+        chirp(0.8, 0, 0.085, "square", 0.07, 1.04);
+        chirp(0.92, 0.07, 0.1, "triangle", 0.065, 1.48);
+        chirp(0.92, 0.07, 0.1, "sine", 0.055, 1.78);
+      } else if (cueKind === "finish") {
+        chirp(1.48, 0, 0.1, "triangle", 0.06, 1.05);
+        chirp(1.08, 0.085, 0.13, "sine", 0.075, 0.88);
+      } else if (cueKind === "session-end") {
+        chirp(1.22, 0, 0.12, "triangle", 0.06, 0.9);
+        chirp(0.86, 0.1, 0.14, "sine", 0.052, 0.62);
+      } else if (cueKind === "burst") {
+        chirp(0.82, 0, 0.1, "triangle", 0.06, 1.18);
+        chirp(1.08, 0.025, 0.11, "sine", 0.052, 1.46);
+        chirp(1.34, 0.05, 0.12, "triangle", 0.048, 1.72);
       } else {
-        tone(base, at, 0.075, "square", 0.018, base * 1.12);
-        tone(base * 1.62, at + 0.035, 0.055, "triangle", 0.012, base * 1.28);
+        chirp(0.92, 0, 0.075, "square", 0.055, 1.08);
+        chirp(1.42, 0.04, 0.065, "triangle", 0.04, 1.2);
       }
     }
 
@@ -411,9 +590,6 @@
         const finished = currentSpeech;
         level = 0;
         emitVisual("end", finished, { reason: reason || "end" });
-        // Normal speech gets a short digital sign-off. Navigation cleanup must be silent or that
-        // tail leaks onto the destination page just after the user leaves this dashboard.
-        if (reason !== "bfcache" && reason !== "dispose") playCue(finished, true);
       }
       currentSpeech = null;
       currentUtterance = null;
@@ -431,7 +607,7 @@
     }
 
     function startSpeech(item) {
-      if (!speech || !Utterance || !enabled || !unlocked || disposed) return;
+      if (!speech || !Utterance || !selectedVoice || mode !== "voice" || !unlocked || disposed) return;
       let utterance;
       try {
         utterance = new Utterance(item.text);
@@ -440,10 +616,12 @@
         return;
       }
       utterance.lang = "th-TH";
-      utterance.rate = 1.08;
-      utterance.pitch = 0.78;
-      utterance.volume = 0.86;
-      if (selectedVoice) utterance.voice = selectedVoice;
+      // Full browser volume keeps Thai consonants clear; the slightly synthetic pitch preserves
+      // the futuristic character without making every line sound like the same harsh robot.
+      utterance.rate = 1.02;
+      utterance.pitch = 0.9;
+      utterance.volume = 1;
+      utterance.voice = selectedVoice;
       item.token = ++sequence;
       currentSpeech = item;
       currentUtterance = utterance; // กัน browser GC utterance กลางคำพูด
@@ -463,11 +641,6 @@
           const wave = 0.42 + Math.abs(Math.sin((now() - beganAt) * 0.018)) * 0.52;
           level = Math.min(1, wave);
           emitVisual("frame", item, { tick });
-          // carrier ดิจิทัลเบามากใต้เสียงพูด — ไม่กลบพยัญชนะของ TTS
-          if (tick % 4 === 0 && audioCtx) {
-            const f = 1180 + (tick % 3) * 170;
-            tone(f, audioCtx.currentTime, 0.025, "square", 0.0045, f * 0.92);
-          }
         }, 85);
       };
 
@@ -480,7 +653,6 @@
       utterance.onend = () => finishSpeech(item.token, "end");
       utterance.onerror = () => finishSpeech(item.token, "error");
 
-      playCue(item, false);
       try {
         speech.speak(utterance);
         // บาง voice ไม่ยิง onstart/onend เมื่อมันพังเงียบ ๆ; watchdog ต้องคืน visual/queue เสมอ
@@ -496,7 +668,15 @@
     }
 
     function drainSpeech() {
-      if (disposed || !enabled || !unlocked || currentSpeech || !speech || !Utterance) return;
+      if (
+        disposed ||
+        mode !== "voice" ||
+        !unlocked ||
+        currentSpeech ||
+        !speech ||
+        !Utterance ||
+        !selectedVoice
+      ) return;
       const at = now();
       speechQueue = speechQueue.filter((item) => at - item.queuedAt <= QUEUE_TTL_MS);
       const next = speechQueue.shift();
@@ -504,7 +684,7 @@
     }
 
     function queueSpeech(item, force) {
-      if (!item.text || !speech || !Utterance) return;
+      if (mode !== "voice" || !item.text || !speech || !Utterance || !selectedVoice) return;
       const at = now();
       const lastAt = lastPhraseAt.get(item.text) || 0;
       if (!force && item.priority < 90 && at - lastAt < SAME_PHRASE_COOLDOWN_MS) return;
@@ -537,7 +717,7 @@
           speechQueue[speechQueue.length - 1] = {
             ...item,
             kind: "burst",
-            text: phraseFor("burst"),
+            text: phraseFor("burst", {}, (poolKey, pool) => pickPhrase(poolKey, pool, `${item.cueSeed}:burst`)),
             priority: PRIORITY.burst,
           };
         }
@@ -548,6 +728,15 @@
       drainSpeech();
     }
 
+    function shouldSpeak(kind, detail) {
+      const d = detail || {};
+      if (d.speak !== undefined) return !!d.speak;
+      if (d.textOverride) return true;
+      if (kind === "state") return ["thinking", "delegating", "waiting", "idle", "blocked"].includes(d.state);
+      // Raw thinking/say/tool edges stay audible as recognisable earcons, not repetitive narration.
+      return SPOKEN_KINDS.has(kind);
+    }
+
     function announce(kind, detail) {
       const d = detail || {};
       const timestamp = finiteMs(d.timestamp, now());
@@ -555,21 +744,29 @@
         d.eventKey ||
         [d.sessionId || "global", d.agentId || "main", kind, d.eventId ?? "", d.keySuffix || ""].join(":");
       if (!rememberKey(eventKey)) return false;
-      if (!enabled || !unlocked || disposed) return false;
+      if (!enabled() || !unlocked || disposed) return false;
       if (!d.force && now() - timestamp > EVENT_TTL_MS) return false;
+
+      let priority = d.priority || PRIORITY[kind] || 20;
+      if (kind === "state" && d.state === "waiting") priority = Math.max(priority, 88);
+      if (kind === "state" && d.state === "idle") priority = Math.max(priority, 54);
 
       const item = {
         kind,
-        text: phraseFor(kind, d),
-        priority: d.priority || PRIORITY[kind] || 20,
+        text: phraseFor(kind, d, (poolKey, pool) => pickPhrase(poolKey, pool, eventKey)),
+        priority,
         sessionId: d.sessionId || null,
         agentId: d.agentId || null,
+        state: d.state || null,
+        waitingKind: d.waitingKind || null,
+        waitingCount: Number(d.waitingCount) || 0,
+        cueSeed: eventKey,
         queuedAt: now(),
       };
-      playCue(item, false); // ทุก event ใหม่ได้ sonic cue แม้คำพูดจะถูก batch/cooldown
+      playCue(item); // ทุก event ใหม่ได้ sonic cue แม้คำพูดจะถูก batch/cooldown
       level = Math.max(level, 0.68);
       emitVisual("cue", item);
-      queueSpeech(item, !!d.force);
+      if (shouldSpeak(kind, d)) queueSpeech(item, !!d.force);
       return true;
     }
 
@@ -590,6 +787,101 @@
         running,
         subs,
       };
+    }
+
+    function waitingKindForAgent(agent) {
+      const rows = (agent && agent.status && agent.status.running) || [];
+      if (rows.some((row) => row && row.tool === "AskUserQuestion")) return "question";
+      if (rows.length) return "confirmation";
+      return "generic";
+    }
+
+    function currentWaitingSummary() {
+      let kind = "generic";
+      for (const entry of waitingSessions.values()) {
+        if (entry.kind === "question") {
+          kind = "question";
+          break;
+        }
+        if (entry.kind === "confirmation") kind = "confirmation";
+      }
+      return { waitingCount: waitingSessions.size, waitingKind: kind };
+    }
+
+    function clearReminderTimer() {
+      if (reminderTimer !== null) {
+        clearTimer(reminderTimer);
+        reminderTimer = null;
+      }
+    }
+
+    function scheduleReminder() {
+      clearReminderTimer();
+      if (
+        disposed ||
+        !remindersEnabled ||
+        !waitingSessions.size ||
+        !enabled() ||
+        !unlocked ||
+        !nextReminderAt
+      ) return;
+      reminderTimer = setTimer(runReminder, Math.max(0, nextReminderAt - now()));
+    }
+
+    function resetReminderSchedule(startAt) {
+      reminderStartedAt = finiteMs(startAt, now());
+      nextReminderAt = reminderStartedAt + REMINDER_EFFECT_MS;
+      scheduleReminder();
+    }
+
+    function runReminder() {
+      reminderTimer = null;
+      if (disposed || !waitingSessions.size || !remindersEnabled) return;
+      const at = now();
+      const shouldUseSpeech = at - reminderStartedAt >= REMINDER_SPEECH_MS;
+      const summary = currentWaitingSummary();
+      if (enabled() && unlocked) {
+        announce("reminder", {
+          ...summary,
+          speak: shouldUseSpeech,
+          timestamp: at,
+          eventKey: `wait-reminder:${++reminderSequence}:${at}`,
+          force: true,
+        });
+      }
+      nextReminderAt = shouldUseSpeech ? at + REMINDER_REPEAT_MS : reminderStartedAt + REMINDER_SPEECH_MS;
+      scheduleReminder();
+    }
+
+    function syncWaitingSessions(agents, frameNow) {
+      const previous = new Set(waitingSessions.keys());
+      const next = new Map();
+      for (const agent of agents) {
+        if (!agent || !agent.sessionId || !agent.status || agent.status.state !== "waiting") continue;
+        next.set(agent.sessionId, {
+          kind: waitingKindForAgent(agent),
+          since: waitingSessions.get(agent.sessionId)?.since || frameNow,
+        });
+      }
+
+      const entered = [];
+      for (const sid of next.keys()) {
+        if (!previous.has(sid)) entered.push(sid);
+      }
+      const hadWaiting = waitingSessions.size > 0;
+      waitingSessions.clear();
+      for (const [sid, entry] of next) waitingSessions.set(sid, entry);
+
+      if (!waitingSessions.size) {
+        clearReminderTimer();
+        reminderStartedAt = 0;
+        nextReminderAt = 0;
+      } else if (!hadWaiting) {
+        resetReminderSchedule(frameNow);
+      } else {
+        scheduleReminder();
+      }
+      return { entered, ...currentWaitingSummary() };
     }
 
     function collectRawEvents(out, events, afterI, base, frameNow) {
@@ -628,11 +920,13 @@
         for (const agent of agents) {
           if (agent && agent.sessionId) sessions.set(agent.sessionId, baselineSession(agent));
         }
+        syncWaitingSessions(agents, frameNow);
         bootstrapped = true;
         return; // ห้ามอ่าน history เก่าออกเสียงตอนเพิ่งเปิดหน้า
       }
 
       const detected = [];
+      const waitingUpdate = syncWaitingSessions(agents, frameNow);
       const present = new Set();
       for (const agent of agents) {
         if (!agent || !agent.sessionId) continue;
@@ -659,7 +953,9 @@
         }
 
         const state = agent.status && agent.status.state;
-        if (state && state !== prev.state) {
+        // Waiting entries are announced once per snapshot below so several simultaneous questions
+        // become one understandable alert instead of competing voices.
+        if (state && state !== prev.state && state !== "waiting") {
           detected.push({
             kind: state === "blocked" ? "blocked" : "state",
             state,
@@ -782,6 +1078,18 @@
         });
       }
 
+      if (waitingUpdate.entered.length) {
+        detected.push({
+          kind: "state",
+          state: "waiting",
+          waitingKind: waitingUpdate.waitingKind,
+          waitingCount: waitingUpdate.waitingCount,
+          sessionId: waitingUpdate.entered[0],
+          timestamp: frameNow,
+          eventKey: ["waiting", ++stateTransitionSequence, waitingUpdate.entered.join(",")].join(":"),
+        });
+      }
+
       // A new session's buffered prompt/tool timestamps naturally predate the SSE frame that
       // revealed it. Give its synthetic start the same effective time as that session's earliest
       // item, then use an explicit rank. This tuple stays transitive even when several sessions
@@ -823,6 +1131,9 @@
       // silent navigation cancel into an audible sign-off cue.
       stopSpeechVisual(reason || "cancelled");
       stopTones();
+      // A BFCache document can keep JavaScript timers alive while another page is visible. Pause
+      // reminders there; pageshow calls resume() and re-evaluates the existing wait safely.
+      if (reason === "bfcache") clearReminderTimer();
       if (speech && typeof speech.cancel === "function") {
         try {
           speech.cancel();
@@ -839,8 +1150,11 @@
       const current = order.find((state) => live.some((a) => a.status.state === state));
       if (current) {
         const agent = live.find((a) => a.status.state === current);
+        const waiting = current === "waiting" ? currentWaitingSummary() : {};
         announce(current === "blocked" ? "blocked" : "state", {
           state: current,
+          ...waiting,
+          speak: true,
           sessionId: agent && agent.sessionId,
           timestamp: now(),
           eventKey: "activation:" + current + ":" + now(),
@@ -856,52 +1170,122 @@
     }
 
     function unlock(announceCurrent) {
-      if (!enabled || disposed) return false;
+      if (!enabled() || disposed) return false;
       unlocked = true;
       resumeAudio();
       chooseVoice();
       emitState();
-      if (announceCurrent) announceCurrentOrReady();
+      if (announceCurrent) {
+        announceCurrentOrReady();
+        if (waitingSessions.size) resetReminderSchedule(now());
+      } else {
+        scheduleReminder();
+      }
       return true;
     }
 
-    function setEnabled(next, config) {
-      const value = !!next;
+    function normalizeMode(value) {
+      if (value === true || value === "1") return "voice";
+      if (value === false || value == null || value === "0") return "off";
+      return AUDIO_MODES.has(value) ? value : "off";
+    }
+
+    function setMode(next, config) {
+      const value = normalizeMode(next);
       const cfg = config || {};
-      if (value === enabled && !(value && cfg.userGesture && !unlocked)) return publicState();
-      enabled = value;
+      if (value === mode) {
+        if (value !== "off" && cfg.userGesture && !unlocked) unlock(cfg.preview !== false);
+        else if (value !== "off" && cfg.userGesture) resumeAudio();
+        return publicState();
+      }
+      const previous = mode;
+      mode = value;
       try {
-        if (storage) storage.setItem(key, enabled ? "1" : "0");
+        if (storage) storage.setItem(key, mode);
       } catch {
         /* private mode / storage disabled */
       }
-      if (!enabled) {
+      if (mode === "off") {
         unlocked = false;
+        clearReminderTimer();
         cancel("disabled");
-      } else if (cfg.userGesture) {
-        unlock(cfg.preview !== false);
+      } else {
+        if (previous === "voice" && mode === "effects") cancel("effects-only");
+        if (cfg.userGesture) {
+          unlock(cfg.preview !== false);
+        } else if (unlocked) {
+          if (mode === "voice") chooseVoice();
+          scheduleReminder();
+        }
       }
       emitState();
       return publicState();
+    }
+
+    function setEnabled(next, config) {
+      return setMode(next ? "voice" : "off", config);
+    }
+
+    function setRemindersEnabled(next) {
+      remindersEnabled = !!next;
+      try {
+        if (storage) storage.setItem(remindersKey, remindersEnabled ? "1" : "0");
+      } catch {
+        /* private mode / storage disabled */
+      }
+      if (!remindersEnabled) clearReminderTimer();
+      else if (waitingSessions.size) resetReminderSchedule(now());
+      emitState();
+      return publicState();
+    }
+
+    function resume() {
+      if (disposed || !enabled()) return false;
+      resumeAudio();
+      scheduleReminder();
+      emitState();
+      return true;
     }
 
     function gestureUnlock(event) {
       // ถ้ากำลังกดปุ่มเสียงเอง ให้ click handler เป็นคนตัดสินก่อนว่าจะเปิดหรือปิด มิฉะนั้นค่าที่จำว่า
       // "เปิด" จากรอบก่อนจะพูดหนึ่งคำทันทีตอนผู้ใช้ตั้งใจกดปิด
       const target = event && event.target;
-      if (target && typeof target.closest === "function" && target.closest(".agent-voice-toggle")) return;
-      if (enabled && !unlocked) unlock(true);
-      else if (enabled && audioCtx && audioCtx.state === "suspended") resumeAudio();
+      if (
+        target &&
+        typeof target.closest === "function" &&
+        target.closest(
+          ".agent-voice-toggle, [data-audio-mode], .hud-audio-controls, .agent-wait-reminder-toggle, .hud-btn-reminders",
+        )
+      ) return;
+      if (enabled() && !unlocked) unlock(true);
+      else if (enabled() && audioCtx && audioCtx.state === "suspended") resumeAudio();
     }
 
     function storageChanged(event) {
-      if (!event || event.key !== key) return;
-      const next = event.newValue === "1";
-      if (next === enabled) return;
-      enabled = next;
-      if (!enabled) {
+      if (!event) return;
+      if (event.key === remindersKey) {
+        const next = event.newValue == null ? true : event.newValue !== "0" && event.newValue !== "false";
+        if (next === remindersEnabled) return;
+        remindersEnabled = next;
+        if (!remindersEnabled) clearReminderTimer();
+        else if (waitingSessions.size) resetReminderSchedule(now());
+        emitState();
+        return;
+      }
+      if (event.key !== key) return;
+      const next = normalizeMode(event.newValue);
+      if (next === mode) return;
+      const previous = mode;
+      mode = next;
+      if (mode === "off") {
         unlocked = false;
+        clearReminderTimer();
         cancel("storage-disabled");
+      } else if (unlocked) {
+        if (previous === "voice" && mode === "effects") cancel("storage-effects-only");
+        if (mode === "voice") chooseVoice();
+        scheduleReminder();
       }
       emitState();
     }
@@ -909,6 +1293,7 @@
     function dispose() {
       if (disposed) return;
       disposed = true;
+      clearReminderTimer();
       cancel("dispose");
       if (doc && typeof doc.removeEventListener === "function") {
         doc.removeEventListener("pointerdown", gestureUnlock, true);
@@ -926,11 +1311,14 @@
       }
       audioCtx = null;
       masterGain = null;
+      limiter = null;
       latestSnapshot = null;
       selectedVoice = null;
       sessions.clear();
+      waitingSessions.clear();
       seenKeys.clear();
       lastPhraseAt.clear();
+      lastPhraseChoice.clear();
       activeOscillators.clear();
     }
 
@@ -946,13 +1334,19 @@
     return {
       ingest,
       announce,
+      setMode,
       setEnabled,
+      setRemindersEnabled,
       unlock,
+      resume,
       cancel,
       dispose,
       getState: publicState,
       get enabled() {
-        return enabled;
+        return enabled();
+      },
+      get mode() {
+        return mode;
       },
       get speaking() {
         return !!currentSpeech;
@@ -963,5 +1357,10 @@
     };
   }
 
-  root.AgentActivityAudio = Object.freeze({ create, STORAGE_KEY });
+  root.AgentActivityAudio = Object.freeze({
+    create,
+    STORAGE_KEY,
+    REMINDERS_STORAGE_KEY,
+    MODES: Object.freeze(["off", "effects", "voice"]),
+  });
 })(typeof globalThis !== "undefined" ? globalThis : this);

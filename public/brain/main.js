@@ -162,8 +162,15 @@ const hud = createHud(hudRoot, {
       fitDistance = fitDistanceFor();
       controls.distance = fitDistance;
     } else if (name === "focus") selectNode(value, { focus: true });
-    else if (name === "voice" && activityAudio) {
-      const state = activityAudio.setEnabled(!!value, { userGesture: true, preview: true });
+    else if (name === "audio-mode" && activityAudio) {
+      const state = typeof activityAudio.setMode === "function"
+        ? activityAudio.setMode(value, { userGesture: true, preview: true })
+        : activityAudio.setEnabled(value !== "off", { userGesture: true, preview: true });
+      hud.setVoiceState(state);
+    } else if (name === "audio-reminders" && activityAudio) {
+      const state = typeof activityAudio.setRemindersEnabled === "function"
+        ? activityAudio.setRemindersEnabled(!!value)
+        : activityAudio.getState();
       hud.setVoiceState(state);
     }
     else if (name === "scenario" && fixture) {
@@ -216,7 +223,7 @@ function bumpPulse(v) {
  */
 function voiceVisualHex(kind) {
   if (kind === "error" || kind === "blocked") return SEMANTIC_HEX.bad;
-  if (kind === "denied") return SEMANTIC_HEX.deny;
+  if (kind === "denied" || kind === "reminder" || kind === "waiting") return SEMANTIC_HEX.deny;
   if (kind === "spawn") return SEMANTIC_HEX.spawn;
   if (kind === "finish" || kind === "tool-end" || kind === "session-end") return SEMANTIC_HEX.ok;
   if (kind === "prompt" || kind === "say") return SEMANTIC_HEX.white;
@@ -255,7 +262,7 @@ if (activityAudioApi && typeof activityAudioApi.create === "function") {
   });
   hud.setVoiceState(activityAudio.getState());
 } else {
-  hud.setVoiceState({ enabled: false, speaking: false, level: 0, supported: false });
+  hud.setVoiceState({ mode: "off", enabled: false, speaking: false, level: 0, supported: false });
 }
 
 store.on("connect", () => {
@@ -623,7 +630,7 @@ function disposeActivityAudio() {
   if (!activityAudio) return;
   activityAudio.dispose();
   activityAudio = null;
-  hud.setVoiceState({ enabled: false, speaking: false, level: 0 });
+  hud.setVoiceState({ mode: "off", enabled: false, speaking: false, level: 0 });
 }
 window.addEventListener("pagehide", (event) => {
   // A BFCache page resumes without re-running this module. Keep its controller alive, but cancel
@@ -633,6 +640,9 @@ window.addEventListener("pagehide", (event) => {
     return;
   }
   disposeActivityAudio();
+});
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted && activityAudio && typeof activityAudio.resume === "function") activityAudio.resume();
 });
 
 /* เปิดทางให้เปิด DevTools แล้วแกะดูสถานะได้โดยไม่ต้องแก้โค้ด */

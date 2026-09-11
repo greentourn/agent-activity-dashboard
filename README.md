@@ -4,9 +4,9 @@
 for how long — down to every sub-agent it spawned, on every surface: the CLI, the VS Code
 extension, the desktop app, and background (`--bg`) sessions.
 
-No dependencies. No hooks. Read-only. Bound to `127.0.0.1` only. Both views also have an optional
-Thai activity voice: every fresh event gets a short futuristic cue, while important events get a
-brief spoken status and a matching visual pulse.
+No dependencies. No hooks. Read-only. Bound to `127.0.0.1` only. Both views also share optional
+cross-platform Thai activity audio: recognisable futuristic cues for every fresh event, brief plain-
+language speech for important changes, and matching visual pulses.
 
 ```bash
 node server.mjs --open
@@ -76,7 +76,7 @@ one.
 | **Install step** | none — zero dependencies, no `npm install`, no build |
 | **Network** | none required. three.js is vendored in `public/vendor/`, so it works fully offline |
 | **Claude Code** | needed only to have *something to watch*. The dashboard itself never launches or talks to Claude Code |
-| **Browser** | any modern browser. The optional activity voice uses Web Audio + Web Speech (the exact Thai voice depends on the browser/OS); the 3D view additionally needs WebGL |
+| **Browser** | any modern browser on Windows, macOS, or Linux. Activity effects use Web Audio; optional Thai speech uses an installed local `th-*` Web Speech voice and falls back safely to effects only if none is available. The 3D view additionally needs WebGL |
 
 ---
 
@@ -107,12 +107,24 @@ One server serves both. Nothing extra to run, and you can switch back and forth 
 
 Both consume the **same** `/api/stream` SSE feed.
 
-Both also expose `เสียง AI: เปิด / ปิด` ("AI voice: on / off"). It is off by default and remembers
-only that preference in browser storage. Once enabled by a click, every newly observed event gets a
-short electronic cue; meaningful changes such as thinking, tool use, delegation, errors, and
-completion are announced in Thai. Rapid bursts keep all cues but compact repeated speech so the
-voice does not trail minutes behind the live activity. The first snapshot is always a silent
-baseline, so opening or reloading a page never reads old transcript history aloud.
+Both use the same browser audio engine and offer three modes: `ปิด` (off, the default), `เอฟเฟกต์`
+(effects only), and `พูด+เอฟเฟกต์` (Thai speech + effects). Every newly observed event gets an
+event-family cue with subtle variation, while speech is reserved for meaningful transitions and a
+short summary of rapid bursts. Thai phrases rotate without an immediate repeat and use everyday
+words such as `ผู้ช่วย` (helper), not spoken implementation jargon.
+
+`เตือนซ้ำเมื่อรอฉัน` (repeat while waiting for me) is a separate remembered setting. When enabled,
+entering a wait alerts immediately, repeats an effect after about 30 seconds, speaks a reminder at
+about 90 seconds in `พูด+เอฟเฟกต์` mode, then reminds about every 120 seconds until the wait clears.
+Browsers may defer those timers while a tab is in the background or the computer sleeps. Simultaneous waits are combined into
+one message instead of competing with each other. The first snapshot is a silent baseline and
+duplicate snapshots never replay audio.
+
+Only the selected mode and reminder preference are kept in browser storage—never activity or
+transcript data. Effects are generated locally and speech uses a local Thai voice exposed by the
+browser/OS, so the audio feature sends no text or activity data over the network. This is not tied to
+Windows: it follows the same path on macOS and other supported desktop systems; if Thai speech is
+unavailable, effects continue without an error.
 
 > ⚠️ Two things to know: `--open` always opens the **classic** view, and the classic view has **no
 > link** to the 3D one — type `/brain.html` yourself. The 3D view does have a `← หน้าคลาสสิก`

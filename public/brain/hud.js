@@ -62,6 +62,13 @@ const QUALITY_LABELS = [
   ["high", "สูง"],
 ];
 
+/** โหมดเสียงเป็นตัวเลือกแยกชัดเจน แทนสวิตช์เดียวที่บอกไม่ได้ว่าจะมีเสียงพูดหรือไม่ */
+const AUDIO_MODES = [
+  ["off", "ปิด", "ปิดเสียงเหตุการณ์ทั้งหมด"],
+  ["effects", "เอฟเฟกต์", "เล่นเสียงสัญญาณสั้น ๆ โดยไม่พูด"],
+  ["voice", "พูด+เอฟเฟกต์", "พูดภาษาไทยเฉพาะเหตุการณ์สำคัญ พร้อมเสียงสัญญาณ"],
+];
+
 const FEED_MAX_ROWS = 60;
 const TOAST_LIFETIME_MS = 3000;
 const TOAST_FADE_MS = 260;
@@ -287,8 +294,18 @@ export function createHud(root, options = {}) {
   /* ต้องตรงกับค่าเริ่มต้นใน main.js (ปิดไว้ตั้งแต่ 2026-09-09) ไม่งั้นป้ายปุ่มจะโกหกตั้งแต่เฟรมแรก */
   let autorotateOn = false;
   let connectedState = false;
-  let voiceState = { enabled: false, unlocked: false, speaking: false, level: 0, supported: true };
-  let activateVoiceFromGesture = false;
+  let voiceState = {
+    mode: "off",
+    enabled: false,
+    effectsEnabled: false,
+    voiceEnabled: false,
+    voiceAvailable: false,
+    remindersEnabled: true,
+    unlocked: false,
+    speaking: false,
+    level: 0,
+    supported: true,
+  };
   let voiceCueTimer = null;
   let lastMoodShown = null;
   let lastFpsShown = null;
@@ -351,9 +368,6 @@ export function createHud(root, options = {}) {
     root.appendChild(overlay);
 
     document.addEventListener("keydown", onKeyDown);
-    /* จำ state ก่อน gesture เพื่อไม่ให้พฤติกรรมปุ่มขึ้นกับลำดับ capture listener */
-    document.addEventListener("pointerdown", rememberVoiceActivationGesture, true);
-    document.addEventListener("keydown", rememberVoiceActivationGesture, true);
     observeBoundaries();
   }
 
@@ -380,12 +394,6 @@ export function createHud(root, options = {}) {
 
   function onKeyDown(e) {
     if (e.key === "Escape" && selectedKey) closeSelection();
-  }
-
-  function rememberVoiceActivationGesture(e) {
-    const isVoiceTarget = !!(refs.voiceBtn && e.target && refs.voiceBtn.contains(e.target));
-    const isActivationKey = e.type !== "keydown" || e.key === "Enter" || e.key === " ";
-    activateVoiceFromGesture = isVoiceTarget && isActivationKey && voiceState.enabled && !voiceState.unlocked;
   }
 
   // ---- แถบบนซ้าย: ตราสัญลักษณ์ + สถานะเชื่อมต่อ ----
@@ -563,13 +571,27 @@ export function createHud(root, options = {}) {
     resetBtn.type = "button";
     resetBtn.addEventListener("click", () => safeCall(onCommand, "reset"));
 
-    const voiceBtn = el("button", "agent-voice-toggle hud-btn-voice");
-    voiceBtn.type = "button";
-    voiceBtn.setAttribute("aria-label", "เปิดหรือปิดเสียงเหตุการณ์ของ AI");
-    voiceBtn.setAttribute("aria-pressed", "false");
-    const voiceIcon = el("span", "agent-voice-icon", "🔇");
-    voiceIcon.setAttribute("aria-hidden", "true");
-    const voiceLabel = el("span", "agent-voice-label hud-voice-label", "เสียง AI: ปิด");
+    const audioRow = el("div", "hud-controls-group hud-audio-controls");
+    audioRow.append(el("span", "hud-controls-caption", "เสียง AI"));
+    const modeGroup = el("div", "hud-audio-mode-group");
+    modeGroup.setAttribute("role", "group");
+    modeGroup.setAttribute("aria-label", "เลือกรูปแบบเสียงเหตุการณ์ของ AI");
+    const modeBtns = new Map();
+    for (const [mode, label, title] of AUDIO_MODES) {
+      const btn = el("button", "hud-btn hud-btn-audio-mode");
+      btn.type = "button";
+      btn.dataset.audioMode = mode;
+      btn.setAttribute("aria-pressed", "false");
+      btn.setAttribute("aria-label", `${label}: ${title}`);
+      btn.title = title;
+      btn.append(el("span", "hud-audio-mode-label", label));
+      btn.addEventListener("click", () => safeCall(onCommand, "audio-mode", mode));
+      modeGroup.append(btn);
+      modeBtns.set(mode, btn);
+    }
+
+    /* มิเตอร์อยู่ในปุ่มโหมดพูด จึงบอกได้ทั้งโหมดที่เลือกและจังหวะคำพูดโดยไม่เพิ่มแถวใหม่ */
+    const voiceBtn = modeBtns.get("voice");
     const voiceMeter = el("span", "agent-voice-meter");
     voiceMeter.setAttribute("aria-hidden", "true");
     const voiceBars = [];
@@ -578,24 +600,25 @@ export function createHud(root, options = {}) {
       voiceMeter.append(bar);
       voiceBars.push(bar);
     }
-    voiceBtn.append(voiceIcon, voiceLabel, voiceMeter);
-    voiceBtn.addEventListener("click", () => {
-      /*
-       * จำ state ก่อน gesture ไว้เพื่อกัน capture-listener อื่นเปลี่ยน state ก่อน click มาถึง
-       * (engine ปัจจุบันสงวน gesture ของปุ่มไว้ให้ handler นี้อยู่แล้ว) แล้วส่ง true ซ้ำเพื่อ
-       * activate/preview; click ครั้งถัดไปจึงค่อยปิดตามปกติ
-       */
-      const activateOnly = activateVoiceFromGesture || (voiceState.enabled && !voiceState.unlocked);
-      activateVoiceFromGesture = false;
-      safeCall(onCommand, "voice", activateOnly ? true : !voiceState.enabled);
+    voiceBtn.append(voiceMeter);
+    audioRow.append(modeGroup);
+
+    const reminderBtn = el("button", "hud-btn hud-btn-reminders", "");
+    reminderBtn.type = "button";
+    reminderBtn.setAttribute("aria-pressed", "true");
+    reminderBtn.addEventListener("click", () => {
+      safeCall(onCommand, "audio-reminders", !voiceState.remindersEnabled);
     });
+
+    refs.audioRow = audioRow;
+    refs.audioModeGroup = modeGroup;
+    refs.audioModeBtns = modeBtns;
     refs.voiceBtn = voiceBtn;
-    refs.voiceIcon = voiceIcon;
-    refs.voiceLabel = voiceLabel;
     refs.voiceMeter = voiceMeter;
     refs.voiceBars = voiceBars;
+    refs.reminderBtn = reminderBtn;
 
-    controls.append(qualityGroup, autorotateBtn, resetBtn, voiceBtn);
+    controls.append(qualityGroup, autorotateBtn, resetBtn, audioRow, reminderBtn);
 
     if (fixtureMode) {
       const scenarioWrap = el("div", "hud-controls-group");
@@ -1164,40 +1187,69 @@ export function createHud(root, options = {}) {
   /** สะท้อนสถานะจริงจาก shared audio engine; เรียกซ้ำได้ทั้งตอนเปิด/ปิดและระหว่างกำลังพูด */
   function setVoiceState(next) {
     const state = next && typeof next === "object" ? next : {};
+    let mode = voiceState.mode;
+    if (AUDIO_MODES.some(([value]) => value === state.mode)) mode = state.mode;
+    else if (state.voiceEnabled === true) mode = "voice";
+    else if (state.effectsEnabled === true) mode = "effects";
+    /* รองรับ engine รุ่นก่อนที่ส่งแค่ enabled ระหว่างช่วงเปลี่ยนผ่าน */
+    else if (state.enabled !== undefined) mode = state.enabled ? "voice" : "off";
+
     voiceState = {
       ...voiceState,
       ...state,
-      enabled: state.enabled === undefined ? voiceState.enabled : !!state.enabled,
+      mode,
+      enabled: mode !== "off",
+      effectsEnabled: mode !== "off",
+      voiceEnabled: mode === "voice",
+      voiceAvailable: state.voiceAvailable === undefined ? voiceState.voiceAvailable : !!state.voiceAvailable,
+      remindersEnabled:
+        state.remindersEnabled === undefined ? voiceState.remindersEnabled : !!state.remindersEnabled,
       speaking: state.speaking === undefined ? voiceState.speaking : !!state.speaking,
       level: state.level === undefined ? voiceState.level : clamp(Number(state.level) || 0, 0, 1),
       supported: state.supported === undefined ? voiceState.supported : !!state.supported,
     };
-    if (!refs.voiceBtn) return;
-    const enabled = voiceState.enabled && voiceState.supported;
-    refs.voiceBtn.disabled = !voiceState.supported;
-    refs.voiceBtn.classList.toggle("is-enabled", enabled);
-    refs.voiceBtn.classList.toggle("is-speaking", enabled && voiceState.speaking);
-    refs.voiceBtn.classList.toggle("has-live-level", enabled && voiceState.speaking);
-    refs.voiceBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
+    if (!refs.audioModeBtns) return;
+
+    for (const [value, btn] of refs.audioModeBtns) {
+      const selected = value === voiceState.mode;
+      btn.disabled = value !== "off" && !voiceState.supported;
+      btn.classList.toggle("hud-btn--active", selected);
+      btn.setAttribute("aria-pressed", selected ? "true" : "false");
+    }
+
+    const voiceActive = voiceState.voiceEnabled && voiceState.voiceAvailable && voiceState.supported;
+    refs.voiceBtn.classList.toggle("is-speaking", voiceActive && voiceState.speaking);
+    refs.voiceBtn.classList.toggle("has-live-level", voiceActive && voiceState.speaking);
     const meterShape = [0.52, 1, 0.7, 0.88];
     refs.voiceBars.forEach((bar, i) => {
       bar.style.setProperty("--voice-meter-height", `${Math.round(3 + voiceState.level * 9 * meterShape[i])}px`);
     });
-    refs.voiceIcon.textContent = voiceState.enabled ? "🔊" : "🔇";
-    refs.voiceLabel.textContent = !voiceState.supported
-      ? "เสียง AI: ไม่รองรับ"
-      : voiceState.enabled && !voiceState.unlocked
-        ? "เสียง AI: แตะเพื่อเริ่ม"
-        : `เสียง AI: ${voiceState.enabled ? (voiceState.speaking ? "กำลังพูด" : "เปิด") : "ปิด"}`;
+
     if (!voiceState.supported) {
-      refs.voiceBtn.title = "เบราว์เซอร์นี้ไม่รองรับ Web Speech หรือ Web Audio";
-    } else if (voiceState.enabled && !voiceState.unlocked) {
-      refs.voiceBtn.title = "เสียง AI เปิดอยู่ — โต้ตอบกับหน้าเว็บหนึ่งครั้งเพื่อเริ่มเสียง";
+      refs.voiceBtn.title = "เบราว์เซอร์นี้ไม่รองรับเสียงพูดหรือเสียงเอฟเฟกต์";
+    } else if (voiceState.voiceEnabled && !voiceState.voiceAvailable) {
+      refs.voiceBtn.title = "ยังไม่พบเสียงภาษาไทยในเครื่อง — โหมดนี้จะเล่นเอฟเฟกต์แทน";
+    } else if (voiceState.voiceEnabled && !voiceState.unlocked) {
+      refs.voiceBtn.title = "แตะอีกครั้งเพื่อเริ่มเสียงพูดและฟังตัวอย่าง";
     } else {
-      refs.voiceBtn.title = voiceState.enabled
-        ? "ปิดเสียงพูดและเอฟเฟกต์เหตุการณ์"
-        : "เปิดเสียงพูดภาษาไทยและเอฟเฟกต์เหตุการณ์";
+      refs.voiceBtn.title = "พูดภาษาไทยเฉพาะเหตุการณ์สำคัญ พร้อมเสียงสัญญาณ";
     }
+
+    const remindersOn = voiceState.remindersEnabled;
+    refs.reminderBtn.disabled = !voiceState.supported;
+    refs.reminderBtn.classList.toggle("hud-btn--active", remindersOn);
+    refs.reminderBtn.classList.toggle("hud-btn-reminders--dormant", voiceState.mode === "off");
+    refs.reminderBtn.setAttribute("aria-pressed", remindersOn ? "true" : "false");
+    refs.reminderBtn.textContent = `เตือนซ้ำเมื่อรอฉัน: ${remindersOn ? "เปิด" : "ปิด"}`;
+    refs.reminderBtn.setAttribute(
+      "aria-label",
+      `เตือนซ้ำเมื่อ AI รอคำตอบจากฉัน: ${remindersOn ? "เปิด" : "ปิด"}`,
+    );
+    refs.reminderBtn.title = voiceState.mode === "off"
+      ? "ตั้งค่านี้จะเริ่มทำงานเมื่อเลือกโหมดเสียง"
+      : remindersOn
+        ? "ส่งเสียงเตือนเป็นระยะจนกว่าคุณจะกลับมาตอบ"
+        : "ไม่ส่งเสียงเตือนซ้ำเมื่อกำลังรอคำตอบ";
   }
 
   /** เฟรมภาพจาก audio engine — meter ขยับตามจังหวะพูดและกระพริบหนึ่งครั้งต่อ cue ใหม่ */
@@ -1208,15 +1260,19 @@ export function createHud(root, options = {}) {
       speaking: frame.phase === "cue" ? voiceState.speaking : active,
       level: frame.phase === "end" ? 0 : frame.level,
     });
-    if (frame.phase !== "cue" || !refs.voiceBtn) return;
-    refs.voiceBtn.classList.remove("is-cue");
+    if (frame.phase !== "cue" || !refs.audioModeBtns) return;
+    for (const btn of refs.audioModeBtns.values()) btn.classList.remove("is-cue");
+    const cueBtn = refs.audioModeBtns.get(voiceState.mode);
+    if (!cueBtn) return;
     // บังคับ reflow เล็ก ๆ เพื่อให้ cue ที่มาติดกันเริ่ม animation ใหม่ทุกเหตุการณ์
-    void refs.voiceBtn.offsetWidth;
-    refs.voiceBtn.classList.add("is-cue");
+    void cueBtn.offsetWidth;
+    cueBtn.classList.add("is-cue");
     if (voiceCueTimer !== null) clearTimeout(voiceCueTimer);
     voiceCueTimer = setTimeout(() => {
       voiceCueTimer = null;
-      if (refs.voiceBtn) refs.voiceBtn.classList.remove("is-cue");
+      if (refs.audioModeBtns) {
+        for (const btn of refs.audioModeBtns.values()) btn.classList.remove("is-cue");
+      }
     }, 260);
   }
 
@@ -1249,8 +1305,6 @@ export function createHud(root, options = {}) {
 
   function dispose() {
     document.removeEventListener("keydown", onKeyDown);
-    document.removeEventListener("pointerdown", rememberVoiceActivationGesture, true);
-    document.removeEventListener("keydown", rememberVoiceActivationGesture, true);
     if (voiceCueTimer !== null) {
       clearTimeout(voiceCueTimer);
       voiceCueTimer = null;

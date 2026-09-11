@@ -73,8 +73,8 @@ control bar.
 | Control | What it does |
 | --- | --- |
 | `กรอง ชื่อ/โปรเจกต์…` | filter box — matches session name and project path |
-| `☐ เตือนเมื่อรอเรา` | beep when an agent looks stuck on a permission prompt |
-| `เสียง AI: เปิด / ปิด` | toggle Thai activity voice + futuristic event effects; every fresh event gets a cue |
+| `☐ เตือนซ้ำเมื่อรอฉัน` | repeat the wait-for-user alert until the waiting state clears |
+| `เสียง AI — ปิด / เอฟเฟกต์ / พูด+เอฟเฟกต์` | choose off, event effects only, or Thai speech plus effects |
 | `รีเซ็ตมุมมอง` | reset zoom/pan and unpin dragged nodes |
 | click a node | open the side panel for that session or sub-agent |
 | click a row in the panel | expand it (full tool input, error text, deny reason) |
@@ -83,17 +83,29 @@ control bar.
 | `✕` | close the side panel |
 
 **Keyboard:** `Enter` or `Space` on a focused node opens its panel; `Escape` closes the panel.
-Only the AI-voice preference is remembered between reloads; no activity or transcript data is
-stored in your browser.
+Only the audio mode and `เตือนซ้ำเมื่อรอฉัน` preference are remembered between reloads; no activity
+or transcript data is stored in your browser.
 
-The activity voice is **off by default**. Click its button once to satisfy the browser's audio
-permission rule. From then on, every newly observed event gets a short electronic cue and important
-events get a brief Thai phrase; the node/core and the button meter react with the speech. Repeated
-SSE snapshots do not replay sounds, and the first snapshot is a silent baseline rather than old
-history. During a rapid event storm all cues remain, but repeated speech is compacted so it stays
-close to live activity. Voice pronunciation depends on the Thai voice installed in your browser or
-operating system. This control is separate from `เตือนเมื่อรอเรา`, which is only the classic
-permission-wait alarm.
+The shared Classic/NEURAL CORE audio engine has three modes. `ปิด` (off) is the default and silences
+everything. `เอฟเฟกต์` (effects) plays cues without speech. `พูด+เอฟเฟกต์` (speech + effects) adds
+brief Thai announcements after the user starts audio with a click. Every newly observed event gets
+a recognisable cue for its event family with subtle variation; speech is reserved for meaningful
+state changes and compact summaries of rapid bursts. Phrase pools do not repeat the same line twice
+in a row and use ordinary spoken Thai—`ผู้ช่วย` (helper), for example—instead of implementation
+jargon.
+
+With `เตือนซ้ำเมื่อรอฉัน` enabled, entering a wait-for-user state alerts immediately. It repeats an
+effect after about 30 seconds, includes speech after about 90 seconds in `พูด+เอฟเฟกต์` mode, then reminds about every
+120 seconds until the wait clears. Background-tab throttling or computer sleep can delay those timers.
+Multiple waiting sessions are combined into one reminder. The
+setting remains remembered while audio is off, but produces no sound until an audible mode is
+selected.
+
+Repeated SSE snapshots never replay sounds, and the first snapshot is a silent baseline rather than
+old history. Effects are generated locally with Web Audio. Speech selects an installed local `th-*`
+voice exposed through Web Speech on Windows, macOS, or another supported OS; if Thai speech is not
+available, the feature falls back safely to effects only. The audio path sends no text or activity
+data over the network.
 
 ### The side panel tabs
 
@@ -155,7 +167,8 @@ A **sub-agent** gets three: `tool ทั้งหมด` (all tools), `ราย
 | `คุณภาพ: ต่ำ / กลาง / สูง` | render quality — low / medium / high |
 | `หมุนอัตโนมัติ: เปิด / ปิด` | auto-rotate — **off** by default |
 | `รีเซ็ตกล้อง` | reset the camera (rotation and target; see the note below) |
-| `เสียง AI: เปิด / ปิด` | toggle the same Thai event voice; the core pulses in time with cues/speech |
+| `เสียง AI — ปิด / เอฟเฟกต์ / พูด+เอฟเฟกต์` | choose the shared audio mode; the core pulses in time with cues/speech |
+| `เตือนซ้ำเมื่อรอฉัน: เปิด / ปิด` | enable or disable repeated wait-for-user reminders |
 | `ทดสอบฉาก` | scenario dropdown — **only appears in fixture mode** |
 | `← หน้าคลาสสิก` | back to the classic view |
 
@@ -432,8 +445,9 @@ Thai → English for everything the interface can put on screen. Grouped by wher
 | Thai | English | Where |
 | --- | --- | --- |
 | กรอง ชื่อ/โปรเจกต์… | Filter by name/project… | search placeholder |
-| เตือนเมื่อรอเรา | Alert me when it's waiting on us | checkbox |
-| เสียง AI: ปิด / แตะเพื่อเริ่ม / เปิด / กำลังพูด / ไม่รองรับ | AI voice: off / tap to start / on / speaking / unsupported | activity-voice button |
+| เตือนซ้ำเมื่อรอฉัน | Repeat reminders while waiting for me | checkbox |
+| เสียง AI | AI audio | audio-mode control |
+| ปิด / เอฟเฟกต์ / พูด+เอฟเฟกต์ | Off / Effects / Speech + effects | audio-mode choices |
 | รีเซ็ตมุมมอง | Reset view | button |
 | กลับมุมมองเริ่มต้น และปลดหมุด node ที่ลากไว้ | Reset to the default view and unpin dragged nodes | that button's tooltip |
 | ปิด | Close | panel close button |
@@ -516,6 +530,8 @@ Thai → English for everything the interface can put on screen. Grouped by wher
 | ทดสอบฉาก | Test scenario | control bar (fixture only) |
 | ← หน้าคลาสสิก | ← Classic view | control bar |
 | หมุนอัตโนมัติ: เปิด / ปิด | Auto-rotate: On / Off | control bar |
+| เสียง AI · ปิด / เอฟเฟกต์ / พูด+เอฟเฟกต์ | AI audio · Off / Effects / Speech + effects | control bar |
+| เตือนซ้ำเมื่อรอฉัน: เปิด / ปิด | Repeat reminders while waiting for me: On / Off | control bar |
 | ขยาย / ย่อ | Expand / Collapse | long-answer toggle |
 | ← กลับไปหน้าคลาสสิก | ← Back to the classic view | boot/error card |
 

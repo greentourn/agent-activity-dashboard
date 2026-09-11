@@ -113,11 +113,12 @@ test("defaults to off and persists an explicit opt-in", async (t) => {
 
   h.controller.setEnabled(true, { userGesture: true, preview: false });
   assert.equal(h.controller.getState().enabled, true);
+  assert.equal(h.controller.getState().mode, "voice");
   assert.equal(h.controller.getState().unlocked, true);
-  assert.equal(h.storage.value(h.api.STORAGE_KEY), "1");
+  assert.equal(h.storage.value(h.api.STORAGE_KEY), "voice");
 
   h.controller.setEnabled(false, { userGesture: true });
-  assert.equal(h.storage.value(h.api.STORAGE_KEY), "0");
+  assert.equal(h.storage.value(h.api.STORAGE_KEY), "off");
   assert.ok(h.speech.cancelCount >= 1);
 });
 
@@ -144,7 +145,10 @@ test("first ingest is a silent baseline; later new events keep producing cues", 
   h.controller.ingest(second);
   // prompt + tool-start + tool-end: ทุก event/lifecycle edge ได้ cue แม้ speech จะเข้า queue ทีละคำ
   assert.equal(h.visuals.filter((e) => e.phase === "cue").length, 3);
-  assert.equal(h.speech.spoken[0].text, "รับคำสั่งใหม่แล้ว");
+  assert.ok(["รับงานใหม่แล้ว", "เริ่มงานใหม่แล้ว", "รับเรื่องแล้ว กำลังเริ่มทำงาน"].includes(h.speech.spoken[0].text));
+  assert.equal(h.speech.spoken[0].volume, 1, "Thai speech uses the browser's maximum volume");
+  assert.equal(h.speech.spoken[0].rate, 1.02);
+  assert.equal(h.speech.spoken[0].pitch, 0.9);
 
   const cueCount = h.visuals.filter((e) => e.phase === "cue").length;
   h.controller.ingest(second);
@@ -174,7 +178,8 @@ test("events observed while disabled are not replayed after enabling", async (t)
       ],
     }),
   );
-  assert.equal(h.speech.spoken[0].text, "กำลังตอบ");
+  assert.equal(h.speech.spoken.length, 0, "routine reply events use an earcon, not repetitive narration");
+  assert.ok(h.visuals.some((e) => e.phase === "cue" && e.kind === "say"));
 });
 
 test("delegating state and sub-agent lifecycle use short Thai phrases", async (t) => {
@@ -185,7 +190,8 @@ test("delegating state and sub-agent lifecycle use short Thai phrases", async (t
 
   const delegatedAt = h.advance(700);
   h.controller.ingest(snapshot(delegatedAt, { state: "delegating" }));
-  assert.equal(h.speech.spoken.at(-1).text, "กำลังรอผลจากซับเอเจนต์");
+  assert.match(h.speech.spoken.at(-1).text, /ผู้ช่วย/);
+  assert.doesNotMatch(h.speech.spoken.at(-1).text, /ซับเอเจนต์/);
   h.finishCurrent();
 
   const spawnAt = h.advance(2_000);
@@ -223,17 +229,8 @@ test("a stored opt-in stays locked until a user gesture unlocks it", async (t) =
   );
   assert.equal(h.speech.spoken.length, 0);
 
-  h.controller.unlock(false);
-  const finalAt = h.advance(700);
-  h.controller.ingest(
-    snapshot(finalAt, {
-      events: [
-        { i: 1, kind: "prompt", ts: new Date(nextAt).toISOString() },
-        { i: 2, kind: "thinking", ts: new Date(finalAt).toISOString() },
-      ],
-    }),
-  );
-  assert.equal(h.speech.spoken[0].text, "กำลังคิด");
+  h.controller.unlock(true);
+  assert.ok(["กำลังคิดอยู่", "กำลังวิเคราะห์ต่อ", "กำลังทบทวนข้อมูล"].includes(h.speech.spoken[0].text));
 });
 
 test("a session appearing after bootstrap emits each fresh buffered event", async (t) => {
@@ -402,7 +399,7 @@ test("re-entering a state stays audible when status.since is reused", async (t) 
   h.controller.ingest(delegatedAgain);
 
   assert.equal(
-    h.visuals.filter((e) => e.phase === "cue" && e.text === "กำลังรอผลจากซับเอเจนต์").length,
+    h.visuals.filter((e) => e.phase === "cue" && e.kind === "state" && e.text.includes("ผู้ช่วย")).length,
     2,
   );
 });
@@ -434,7 +431,8 @@ test("an unknown sub-agent outcome is announced without claiming failure", async
     }),
   );
   const finishCue = h.visuals.find((e) => e.phase === "cue" && e.kind === "finish");
-  assert.equal(finishCue.text, "ซับเอเจนต์สิ้นสุดการทำงาน");
+  assert.match(finishCue.text, /ผู้ช่วย/);
+  assert.doesNotMatch(finishCue.text, /ไม่สำเร็จ/);
 });
 
 test("a blocked localStorage getter cannot break optional audio initialization", async () => {
@@ -465,6 +463,9 @@ test("audio-only browsers still synthesize a sonic cue for every detected event"
   const api = await loadApi();
   const started = [];
   const stopped = [];
+  const gainNodes = [];
+  const gainRamps = [];
+  let compressor = null;
   let context;
   class FakeAudioContext {
     constructor() {
@@ -474,16 +475,33 @@ test("audio-only browsers still synthesize a sonic cue for every detected event"
       this.destination = {};
     }
     createGain() {
-      return {
+      const node = {
         gain: {
           value: 0,
           setValueAtTime() {},
-          exponentialRampToValueAtTime() {},
+          exponentialRampToValueAtTime(value) {
+            gainRamps.push(value);
+          },
         },
         connect() {
           return this;
         },
       };
+      gainNodes.push(node);
+      return node;
+    }
+    createDynamicsCompressor() {
+      compressor = {
+        threshold: { value: 0 },
+        knee: { value: 0 },
+        ratio: { value: 0 },
+        attack: { value: 0 },
+        release: { value: 0 },
+        connect() {
+          return this;
+        },
+      };
+      return compressor;
     }
     createOscillator() {
       return {
@@ -534,6 +552,9 @@ test("audio-only browsers still synthesize a sonic cue for every detected event"
   t.after(() => controller.dispose());
   controller.setEnabled(true, { userGesture: true, preview: false });
   assert.equal(context.state, "running");
+  assert.equal(gainNodes[0].gain.value, 0.92, "event master gain stays at the louder preset");
+  assert.equal(compressor.threshold.value, -14);
+  assert.equal(compressor.ratio.value, 12);
   controller.ingest(snapshot(clock));
 
   clock += 700;
@@ -545,12 +566,13 @@ test("audio-only browsers still synthesize a sonic cue for every detected event"
       ],
     }),
   );
-  // Each ordinary cue consists of two short oscillator tones. With speech disabled there is no
-  // additional speech pre-chirp, so four starts prove that neither event was batched away.
-  assert.equal(started.length, 4);
-  assert.equal(stopped.length, 4, "each tone has its normal scheduled stop");
+  // Cue families use different note counts. At least one oscillator per fresh event proves that
+  // neither edge was batched away.
+  assert.ok(started.length >= 3);
+  assert.ok(Math.max(...gainRamps) >= 0.055, "ordinary event cues use the louder per-tone level");
+  assert.equal(stopped.length, started.length, "each tone has its normal scheduled stop");
   controller.cancel("bfcache");
-  assert.equal(stopped.length, 8, "navigation cancel immediately stops every scheduled tone");
+  assert.equal(stopped.length, started.length * 2, "navigation cancel immediately stops every scheduled tone");
 });
 
 test("persisted audio unlocks on a real page gesture but not on the sound toggle pre-click", async (t) => {
@@ -581,5 +603,144 @@ test("persisted audio unlocks on a real page gesture but not on the sound toggle
 
   handlers.get("pointerdown")({ target: { closest: () => null } });
   assert.equal(controller.getState().unlocked, true);
-  assert.equal(speech.spoken[0].text, "กำลังคิด");
+  assert.ok(["กำลังคิดอยู่", "กำลังวิเคราะห์ต่อ", "กำลังทบทวนข้อมูล"].includes(speech.spoken[0].text));
+});
+
+test("three audio modes persist independently from repeat-wait reminders", async (t) => {
+  const h = await harness({ stored: true });
+  t.after(() => h.controller.dispose());
+  assert.equal(h.controller.getState().mode, "voice", "legacy 1 migrates to voice mode");
+
+  h.controller.setMode("effects", { userGesture: true, preview: false });
+  assert.equal(h.controller.getState().mode, "effects");
+  assert.equal(h.controller.getState().voiceEnabled, false);
+  assert.equal(h.storage.value(h.api.STORAGE_KEY), "effects");
+
+  h.controller.setRemindersEnabled(false);
+  assert.equal(h.controller.getState().remindersEnabled, false);
+  assert.equal(h.storage.value(h.api.REMINDERS_STORAGE_KEY), "0");
+  h.controller.setMode("off", { userGesture: true });
+  assert.equal(h.controller.getState().remindersEnabled, false, "the reminder preference survives sound being off");
+});
+
+test("effects-only keeps every event cue but does not start browser speech", async (t) => {
+  const h = await harness();
+  t.after(() => h.controller.dispose());
+  h.controller.setMode("effects", { userGesture: true, preview: false });
+  h.controller.ingest(snapshot(h.now()));
+  const at = h.advance(700);
+  h.controller.ingest(
+    snapshot(at, {
+      events: [
+        { i: 1, kind: "prompt", ts: new Date(at).toISOString() },
+        { i: 2, kind: "tool", tool: "Read", done: true, ts: new Date(at).toISOString() },
+      ],
+    }),
+  );
+  assert.equal(h.visuals.filter((event) => event.phase === "cue").length, 3);
+  assert.equal(h.speech.spoken.length, 0);
+});
+
+test("voice mode keeps activity local: a remote-only Thai voice falls back to effects", async (t) => {
+  const api = await loadApi();
+  const remoteOnlySpeech = fakeSpeech();
+  remoteOnlySpeech.getVoices = () => [{ name: "Remote Thai", lang: "th-TH", localService: false }];
+  const visuals = [];
+  const controller = api.create({
+    storage: fakeStorage(),
+    speechSynthesis: remoteOnlySpeech,
+    SpeechSynthesisUtterance: FakeUtterance,
+    AudioContext: null,
+    document: null,
+    onVisual: (event) => visuals.push(event),
+  });
+  t.after(() => controller.dispose());
+  controller.setMode("voice", { userGesture: true, preview: false });
+  assert.equal(controller.getState().voiceAvailable, false);
+  controller.announce("prompt", { force: true, timestamp: Date.now(), eventKey: "remote-only" });
+  assert.equal(remoteOnlySpeech.spoken.length, 0);
+  assert.ok(visuals.some((event) => event.phase === "cue" && event.kind === "prompt"));
+});
+
+test("plain Thai phrase pools avoid an immediate repeated line", async (t) => {
+  const h = await harness();
+  t.after(() => h.controller.dispose());
+  h.controller.setMode("voice", { userGesture: true, preview: false });
+  h.controller.announce("prompt", { force: true, timestamp: h.now(), eventKey: "phrase-a" });
+  const first = h.speech.spoken.at(-1).text;
+  h.finishCurrent();
+  h.advance(400);
+  h.controller.announce("prompt", { force: true, timestamp: h.now(), eventKey: "phrase-b" });
+  const second = h.speech.spoken.at(-1).text;
+  assert.notEqual(first, second);
+});
+
+test("wait reminders cue at 30s, speak at 90s, and stop after the waiting state clears", async (t) => {
+  const api = await loadApi();
+  let clock = 1_800_000_000_000;
+  let nextTimerId = 1;
+  const timers = new Map();
+  const setTimeoutFake = (fn, delay) => {
+    const id = nextTimerId++;
+    timers.set(id, { due: clock + Number(delay || 0), fn });
+    return id;
+  };
+  const clearTimeoutFake = (id) => timers.delete(id);
+  const runDue = () => {
+    let ready = true;
+    while (ready) {
+      ready = [...timers.entries()]
+        .filter(([, timer]) => timer.due <= clock)
+        .sort((a, b) => a[1].due - b[1].due)[0];
+      if (ready) {
+        timers.delete(ready[0]);
+        ready[1].fn();
+      }
+    }
+  };
+  const speech = fakeSpeech();
+  const visuals = [];
+  const controller = api.create({
+    storage: fakeStorage(),
+    speechSynthesis: speech,
+    SpeechSynthesisUtterance: FakeUtterance,
+    AudioContext: null,
+    document: null,
+    now: () => clock,
+    setTimeout: setTimeoutFake,
+    clearTimeout: clearTimeoutFake,
+    setInterval: () => 0,
+    clearInterval: () => {},
+    onVisual: (event) => visuals.push(event),
+  });
+  t.after(() => controller.dispose());
+  controller.setMode("voice", { userGesture: true, preview: false });
+  controller.ingest(
+    snapshot(clock, {
+      state: "waiting",
+      running: [{ tool: "AskUserQuestion", startedTs: new Date(clock).toISOString() }],
+    }),
+  );
+  assert.equal(visuals.filter((event) => event.phase === "cue" && event.kind === "reminder").length, 0, "baseline stays quiet");
+
+  clock += 30_000;
+  runDue();
+  assert.equal(visuals.filter((event) => event.phase === "cue" && event.kind === "reminder").length, 1);
+  assert.equal(speech.spoken.length, 0, "first repeat is an effect only");
+
+  controller.cancel("bfcache");
+  clock += 60_000;
+  runDue();
+  assert.equal(visuals.filter((event) => event.phase === "cue" && event.kind === "reminder").length, 1, "hidden pages stay silent");
+  controller.resume();
+  runDue();
+  assert.equal(visuals.filter((event) => event.phase === "cue" && event.kind === "reminder").length, 2);
+  assert.equal(speech.spoken.length, 1, "second repeat adds a short spoken reminder");
+  assert.match(speech.spoken[0].text, /คุณ/);
+
+  controller.ingest(snapshot(clock, { state: "thinking", running: [] }));
+  const before = visuals.filter((event) => event.phase === "cue" && event.kind === "reminder").length;
+  clock += 240_000;
+  runDue();
+  assert.equal(visuals.filter((event) => event.phase === "cue" && event.kind === "reminder").length, before);
 });

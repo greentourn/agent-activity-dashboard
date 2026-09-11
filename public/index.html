@@ -181,6 +181,41 @@
         -webkit-user-select: none;
         user-select: none;
       }
+      .agent-audio-mode-control {
+        cursor: default;
+        padding-right: 7px;
+      }
+      .agent-audio-mode-control:focus-within {
+        color: var(--agent-voice-accent);
+        border-color: color-mix(in srgb, var(--agent-voice-accent) 78%, transparent);
+        outline: 2px solid color-mix(in srgb, var(--agent-voice-accent) 30%, transparent);
+        outline-offset: 2px;
+      }
+      .agent-audio-mode-control.is-unsupported {
+        opacity: 0.58;
+      }
+      .agent-audio-mode-select {
+        max-width: 126px;
+        margin: -3px 0;
+        padding: 3px 18px 3px 4px;
+        border: 0;
+        border-radius: 4px;
+        outline: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-weight: 600;
+        line-height: 1.25;
+        cursor: pointer;
+        color-scheme: dark light;
+      }
+      .agent-audio-mode-select option {
+        background: var(--card);
+        color: var(--fg);
+      }
+      .agent-wait-reminder-toggle input:disabled + span {
+        opacity: 0.58;
+      }
       .conn {
         display: inline-flex;
         align-items: center;
@@ -1144,18 +1179,33 @@
       <div class="pills" id="pills"></div>
       <div class="controls">
         <input id="filter" type="search" placeholder="กรอง ชื่อ/โปรเจกต์…" />
-        <label class="toggle"><input type="checkbox" id="beep" /> เตือนเมื่อรอเรา</label>
-        <button
-          type="button"
+        <label
+          class="toggle agent-wait-reminder-toggle"
+          title="เตือนเป็นระยะจนกว่างานที่รอคำตอบหรือการยืนยันจากคุณจะทำต่อได้"
+        >
+          <input type="checkbox" id="beep" />
+          <span>เตือนซ้ำเมื่อรอฉัน</span>
+        </label>
+        <div
           id="ai-voice"
-          class="agent-voice-toggle"
-          aria-pressed="false"
-          title="เปิดเสียงพูดสั้น ๆ สำหรับเหตุการณ์ใหม่ของ agent"
+          class="agent-voice-toggle agent-audio-mode-control"
+          role="group"
+          aria-label="เสียงเหตุการณ์ของ AI"
+          title="เลือกรูปแบบเสียงสำหรับเหตุการณ์ของ AI"
         >
           <span class="agent-voice-icon" aria-hidden="true">🔇</span>
-          <span class="agent-voice-label">เสียง AI: ปิด</span>
+          <label class="agent-voice-label" for="ai-voice-mode">เสียง AI</label>
+          <select
+            id="ai-voice-mode"
+            class="agent-audio-mode-select"
+            aria-label="โหมดเสียง AI: ปิด เอฟเฟกต์ หรือพูดพร้อมเอฟเฟกต์"
+          >
+            <option value="off">ปิด</option>
+            <option value="effects">เอฟเฟกต์</option>
+            <option value="voice">พูด+เอฟเฟกต์</option>
+          </select>
           <span class="agent-voice-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-        </button>
+        </div>
         <span class="conn" id="conn"><i></i> <span>ต่อ…</span></span>
       </div>
     </header>
@@ -1401,7 +1451,6 @@
       const nodes = new Map();
       const edges = new Map();
       const wfArcs = new Map();
-      const wasWaiting = new Set();
       let selected = null; // { kind:'hub'|'sub', sessionId, agentId }
       let panelTab = "feed";
       let feedSeq = 0;
@@ -3578,12 +3627,21 @@
       const aiVoiceButton = $("#ai-voice");
       const aiVoiceLabel = aiVoiceButton.querySelector(".agent-voice-label");
       const aiVoiceIcon = aiVoiceButton.querySelector(".agent-voice-icon");
+      const aiVoiceModeSelect = $("#ai-voice-mode");
+      const aiWaitRemindersToggle = $("#beep");
       const aiVoiceBars = [...aiVoiceButton.querySelectorAll(".agent-voice-meter > i")];
       const voiceCueTimers = new WeakMap();
       let activeVoiceHub = null;
       let voiceMeterResetTimer = null;
-      let activateVoiceFromGesture = false;
-      let activityVoiceState = { enabled: false, unlocked: false, supported: true, speaking: false, level: 0 };
+      let activityVoiceState = {
+        mode: "off",
+        enabled: false,
+        unlocked: false,
+        supported: true,
+        speaking: false,
+        level: 0,
+        remindersEnabled: true,
+      };
 
       function visibleVoiceHub(sessionId) {
         if (!sessionId) return null;
@@ -3635,24 +3693,47 @@
 
       function renderActivityVoiceState(state) {
         activityVoiceState = state;
-        const active = state.enabled && state.supported;
-        aiVoiceButton.disabled = !state.supported;
+        const mode = ["off", "effects", "voice"].includes(state.mode) ? state.mode : state.enabled ? "voice" : "off";
+        const active = mode !== "off" && state.supported;
+        const remindersEnabled = state.remindersEnabled !== false;
+        // Engines before the local-voice capability field are treated as potentially voice-capable.
+        const voiceAvailable = state.voiceAvailable !== false;
+        aiVoiceModeSelect.disabled = !state.supported;
+        aiVoiceModeSelect.value = mode;
+        aiWaitRemindersToggle.checked = remindersEnabled;
+        // This is a remembered preference in its own right, so keep it changeable even while the
+        // audible mode is off. It simply stays dormant until the user turns sound back on.
+        aiWaitRemindersToggle.disabled = !state.supported;
+        aiVoiceButton.classList.toggle("is-unsupported", !state.supported);
         aiVoiceButton.classList.toggle("is-enabled", active);
         aiVoiceButton.classList.toggle("is-speaking", active && state.speaking);
-        aiVoiceButton.setAttribute("aria-pressed", String(active));
-        aiVoiceLabel.textContent = !state.supported
-          ? "เสียง AI: ไม่รองรับ"
-          : state.enabled && !state.unlocked
-            ? "เสียง AI: แตะเพื่อเริ่ม"
-            : `เสียง AI: ${state.enabled ? (state.speaking ? "กำลังพูด" : "เปิด") : "ปิด"}`;
-        aiVoiceIcon.textContent = active ? "🔊" : "🔇";
+        aiVoiceButton.dataset.audioMode = mode;
+        aiVoiceLabel.textContent = state.supported ? "เสียง AI" : "เสียง AI: ไม่รองรับ";
+        aiVoiceIcon.textContent = mode === "voice" ? "🔊" : mode === "effects" ? "🔉" : "🔇";
+        aiVoiceModeSelect.setAttribute(
+          "aria-label",
+          state.supported
+            ? `โหมดเสียง AI ปัจจุบัน: ${mode === "voice" ? "พูดพร้อมเอฟเฟกต์" : mode === "effects" ? "เอฟเฟกต์" : "ปิด"}`
+            : "โหมดเสียง AI: เบราว์เซอร์นี้ไม่รองรับ",
+        );
         aiVoiceButton.title = !state.supported
           ? "เบราว์เซอร์นี้ไม่รองรับ Web Audio หรือเสียงพูด"
-          : state.enabled && !state.unlocked
-            ? "เสียง AI เปิดอยู่ — โต้ตอบกับหน้าเว็บหนึ่งครั้งเพื่อเริ่มเสียง"
-            : state.voiceName
-              ? `เสียงเหตุการณ์ใหม่ · ${state.voiceName}`
-              : "เสียงพูดสั้น ๆ สำหรับเหตุการณ์ใหม่ของ agent";
+          : active && !state.unlocked
+            ? "เลือกโหมดเสียงแล้ว — โต้ตอบกับหน้าเว็บหนึ่งครั้งเพื่อเริ่มเสียง"
+            : mode === "voice"
+              ? voiceAvailable
+                ? `พูดภาษาไทยพร้อมเอฟเฟกต์${state.voiceName ? ` · ${state.voiceName}` : ""}`
+                : "ยังไม่พบเสียงภาษาไทยในเครื่อง — จะเล่นเอฟเฟกต์แทน"
+              : mode === "effects"
+                ? "เอฟเฟกต์เสียงเท่านั้น ไม่มีเสียงพูด"
+                : "ปิดเสียงเหตุการณ์ของ AI";
+        aiWaitRemindersToggle.parentElement.title = !state.supported
+          ? "เบราว์เซอร์นี้ไม่รองรับเสียงเตือน"
+          : mode === "off"
+            ? "เปิดโหมดเสียงก่อน จึงจะใช้การเตือนซ้ำได้"
+            : remindersEnabled
+              ? "กำลังเตือนเป็นระยะจนกว่างานที่รอคุณจะทำต่อได้"
+              : "เปิดเพื่อเตือนเป็นระยะเมื่องานรอคำตอบหรือการยืนยันจากคุณ";
         if (!state.enabled || !state.speaking) {
           aiVoiceButton.classList.remove("is-voice-fallback");
           setVoiceMeterLevel(0, false);
@@ -3703,29 +3784,43 @@
         }
       }
 
-      function rememberVoiceActivationGesture(event) {
-        const isVoiceTarget = aiVoiceButton.contains(event.target);
-        const isActivationKey = event.type !== "keydown" || event.key === "Enter" || event.key === " ";
-        // Keep the pre-gesture state so activation does not depend on capture-listener ordering
-        // (the current engine reserves toggle gestures for this click handler as well).
-        activateVoiceFromGesture =
-          isVoiceTarget && isActivationKey && activityVoiceState.enabled && !activityVoiceState.unlocked;
+      const activityAudioApi = window.AgentActivityAudio;
+      const activityAudio = activityAudioApi && typeof activityAudioApi.create === "function"
+        ? activityAudioApi.create({
+            onState: renderActivityVoiceState,
+            onVisual: visualizeActivityVoice,
+          })
+        : {
+            getState: () => ({ mode: "off", enabled: false, supported: false, remindersEnabled: true }),
+            setEnabled: () => ({ mode: "off", enabled: false, supported: false, remindersEnabled: true }),
+            setMode: () => ({ mode: "off", enabled: false, supported: false, remindersEnabled: true }),
+            setRemindersEnabled: () => ({ mode: "off", enabled: false, supported: false, remindersEnabled: true }),
+            cancel: () => {},
+            dispose: () => {},
+          };
+      renderActivityVoiceState(activityAudio.getState());
+
+      function changeActivityAudioMode() {
+        const mode = ["off", "effects", "voice"].includes(aiVoiceModeSelect.value)
+          ? aiVoiceModeSelect.value
+          : "off";
+        let state;
+        if (typeof activityAudio.setMode === "function") {
+          state = activityAudio.setMode(mode, { userGesture: true, preview: true });
+        } else {
+          state = activityAudio.setEnabled(mode !== "off", { userGesture: true, preview: true });
+        }
+        renderActivityVoiceState(state);
       }
 
-      document.addEventListener("pointerdown", rememberVoiceActivationGesture, true);
-      document.addEventListener("keydown", rememberVoiceActivationGesture, true);
+      function changeWaitingReminders() {
+        if (typeof activityAudio.setRemindersEnabled === "function") {
+          renderActivityVoiceState(activityAudio.setRemindersEnabled(aiWaitRemindersToggle.checked));
+        }
+      }
 
-      const activityAudio = window.AgentActivityAudio.create({
-        onState: renderActivityVoiceState,
-        onVisual: visualizeActivityVoice,
-      });
-
-      aiVoiceButton.addEventListener("click", () => {
-        const state = activityAudio.getState();
-        const activateOnly = activateVoiceFromGesture || (state.enabled && !state.unlocked);
-        activateVoiceFromGesture = false;
-        activityAudio.setEnabled(activateOnly ? true : !state.enabled, { userGesture: true, preview: true });
-      });
+      aiVoiceModeSelect.addEventListener("change", changeActivityAudioMode);
+      aiWaitRemindersToggle.addEventListener("change", changeWaitingReminders);
 
       window.addEventListener(
         "pagehide",
@@ -3737,36 +3832,15 @@
             return;
           }
           clearTimeout(voiceMeterResetTimer);
-          document.removeEventListener("pointerdown", rememberVoiceActivationGesture, true);
-          document.removeEventListener("keydown", rememberVoiceActivationGesture, true);
+          aiVoiceModeSelect.removeEventListener("change", changeActivityAudioMode);
+          aiWaitRemindersToggle.removeEventListener("change", changeWaitingReminders);
           clearActiveVoiceHub();
           activityAudio.dispose();
         },
       );
-
-      // =====================================================================
-      // alerting
-      // =====================================================================
-
-      let audioCtx = null;
-      function beep() {
-        if (!$("#beep").checked) return;
-        try {
-          audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-          const osc = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
-          osc.type = "sine";
-          osc.frequency.value = 880;
-          gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.14, audioCtx.currentTime + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.32);
-          osc.connect(gain).connect(audioCtx.destination);
-          osc.start();
-          osc.stop(audioCtx.currentTime + 0.34);
-        } catch {
-          /* audio is optional */
-        }
-      }
+      window.addEventListener("pageshow", (event) => {
+        if (event.persisted && typeof activityAudio.resume === "function") activityAudio.resume();
+      });
 
       // =====================================================================
       // render
@@ -3816,16 +3890,6 @@
 
         renderPanel(now);
 
-        // Alerting scans EVERY agent, not the filtered set — a filter hides a card, it must not
-        // silence the agent that is waiting on you.
-        for (const a of snapshot.agents || []) {
-          if (a.status.state === "waiting" && !wasWaiting.has(a.sessionId)) {
-            wasWaiting.add(a.sessionId);
-            beep();
-          } else if (a.status.state !== "waiting") {
-            wasWaiting.delete(a.sessionId);
-          }
-        }
       }
 
       // live clocks — independent of everything else, so a still graph still ticks
