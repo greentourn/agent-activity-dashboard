@@ -1,0 +1,107 @@
+/* Shared sound-toggle + speech meter used by both dashboard surfaces. */
+.agent-voice-toggle {
+  --agent-voice-accent: var(--accent, var(--hud-accent, #58d3ff));
+  --agent-voice-speaking: #7df9ff;
+  --agent-voice-text: var(--fg-dim, var(--hud-text-dim, #9aa7b8));
+  --agent-voice-bg: var(--card, rgba(12, 27, 48, 0.86));
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--agent-voice-accent) 28%, transparent);
+  border-radius: 6px;
+  background: var(--agent-voice-bg);
+  color: var(--agent-voice-text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.agent-voice-toggle:hover {
+  color: var(--agent-voice-accent);
+  border-color: color-mix(in srgb, var(--agent-voice-accent) 62%, transparent);
+}
+
+.agent-voice-toggle.is-enabled {
+  color: var(--agent-voice-accent);
+  border-color: color-mix(in srgb, var(--agent-voice-accent) 72%, transparent);
+  box-shadow: inset 0 0 14px color-mix(in srgb, var(--agent-voice-accent) 8%, transparent);
+}
+
+.agent-voice-icon {
+  width: 14px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.agent-voice-meter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 19px;
+  height: 13px;
+}
+
+.agent-voice-meter > i {
+  display: block;
+  width: 2px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.42;
+  transform-origin: center;
+}
+
+.agent-voice-toggle.is-speaking {
+  color: var(--agent-voice-speaking);
+  border-color: var(--agent-voice-speaking);
+  box-shadow: 0 0 16px rgba(88, 211, 255, 0.32), inset 0 0 12px rgba(88, 211, 255, 0.1);
+}
+
+.agent-voice-toggle.is-speaking .agent-voice-meter > i {
+  opacity: 1;
+  animation: agent-voice-bar 0.42s ease-in-out infinite alternate;
+}
+
+.agent-voice-toggle.is-speaking .agent-voice-meter > i:nth-child(2) {
+  animation-delay: -0.28s;
+}
+
+.agent-voice-toggle.is-speaking .agent-voice-meter > i:nth-child(3) {
+  animation-delay: -0.14s;
+}
+
+.agent-voice-toggle.is-speaking .agent-voice-meter > i:nth-child(4) {
+  animation-delay: -0.36s;
+}
+
+.agent-voice-toggle.is-cue .agent-voice-icon {
+  animation: agent-voice-cue 0.24s ease-out;
+}
+
+@keyframes agent-voice-bar {
+  from { height: 3px; }
+  to { height: 12px; }
+}
+
+@keyframes agent-voice-cue {
+  0% { transform: scale(0.72); opacity: 0.55; }
+  55% { transform: scale(1.34); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-voice-toggle.is-speaking .agent-voice-meter > i {
+    animation: none;
+    height: 8px;
+  }
+  .agent-voice-toggle.is-cue .agent-voice-icon {
+    animation: none;
+  }
+}

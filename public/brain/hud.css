@@ -1125,6 +1125,33 @@
   text-align: center;
 }
 
+/* สวิตช์เสียงใช้สกินร่วมกับหน้า Classic แต่จัดสัดส่วนให้พอดีกับแผงควบคุมของ Neural */
+.hud-btn-voice {
+  --agent-voice-accent: var(--hud-mood-color);
+  --agent-voice-text: var(--hud-text-dim);
+  --agent-voice-bg: rgba(255, 255, 255, 0.04);
+  width: 100%;
+  min-height: 31px;
+  justify-content: flex-start;
+}
+.hud-btn-voice .hud-voice-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+.hud-btn-voice .agent-voice-meter {
+  flex: 0 0 auto;
+}
+.hud-btn-voice.has-live-level .agent-voice-meter > i {
+  height: var(--voice-meter-height, 3px);
+  animation: none;
+  transition: height 70ms linear;
+}
+.hud-btn-voice:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .hud-scenario {
   flex: 1 1 auto;
   font-size: 11px;

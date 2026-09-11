@@ -4,7 +4,9 @@
 for how long — down to every sub-agent it spawned, on every surface: the CLI, the VS Code
 extension, the desktop app, and background (`--bg`) sessions.
 
-No dependencies. No hooks. Read-only. Bound to `127.0.0.1` only.
+No dependencies. No hooks. Read-only. Bound to `127.0.0.1` only. Both views also have an optional
+Thai activity voice: every fresh event gets a short futuristic cue, while important events get a
+brief spoken status and a matching visual pulse.
 
 ```bash
 node server.mjs --open
@@ -74,7 +76,7 @@ one.
 | **Install step** | none — zero dependencies, no `npm install`, no build |
 | **Network** | none required. three.js is vendored in `public/vendor/`, so it works fully offline |
 | **Claude Code** | needed only to have *something to watch*. The dashboard itself never launches or talks to Claude Code |
-| **Browser** | any modern browser. The 3D view additionally needs WebGL (it says so and links back if not) |
+| **Browser** | any modern browser. The optional activity voice uses Web Audio + Web Speech (the exact Thai voice depends on the browser/OS); the 3D view additionally needs WebGL |
 
 ---
 
@@ -104,6 +106,13 @@ One server serves both. Nothing extra to run, and you can switch back and forth 
 | **NEURAL CORE** | <http://127.0.0.1:7676/brain.html> | 3D brain — the overall shape of the system at a glance |
 
 Both consume the **same** `/api/stream` SSE feed.
+
+Both also expose `เสียง AI: เปิด / ปิด` ("AI voice: on / off"). It is off by default and remembers
+only that preference in browser storage. Once enabled by a click, every newly observed event gets a
+short electronic cue; meaningful changes such as thinking, tool use, delegation, errors, and
+completion are announced in Thai. Rapid bursts keep all cues but compact repeated speech so the
+voice does not trail minutes behind the live activity. The first snapshot is always a silent
+baseline, so opening or reloading a page never reads old transcript history aloud.
 
 > ⚠️ Two things to know: `--open` always opens the **classic** view, and the classic view has **no
 > link** to the 3D one — type `/brain.html` yourself. The 3D view does have a `← หน้าคลาสสิก`

@@ -74,6 +74,7 @@ control bar.
 | --- | --- |
 | `กรอง ชื่อ/โปรเจกต์…` | filter box — matches session name and project path |
 | `☐ เตือนเมื่อรอเรา` | beep when an agent looks stuck on a permission prompt |
+| `เสียง AI: เปิด / ปิด` | toggle Thai activity voice + futuristic event effects; every fresh event gets a cue |
 | `รีเซ็ตมุมมอง` | reset zoom/pan and unpin dragged nodes |
 | click a node | open the side panel for that session or sub-agent |
 | click a row in the panel | expand it (full tool input, error text, deny reason) |
@@ -82,7 +83,17 @@ control bar.
 | `✕` | close the side panel |
 
 **Keyboard:** `Enter` or `Space` on a focused node opens its panel; `Escape` closes the panel.
-Nothing is remembered between reloads — the tool stores nothing in your browser.
+Only the AI-voice preference is remembered between reloads; no activity or transcript data is
+stored in your browser.
+
+The activity voice is **off by default**. Click its button once to satisfy the browser's audio
+permission rule. From then on, every newly observed event gets a short electronic cue and important
+events get a brief Thai phrase; the node/core and the button meter react with the speech. Repeated
+SSE snapshots do not replay sounds, and the first snapshot is a silent baseline rather than old
+history. During a rapid event storm all cues remain, but repeated speech is compacted so it stays
+close to live activity. Voice pronunciation depends on the Thai voice installed in your browser or
+operating system. This control is separate from `เตือนเมื่อรอเรา`, which is only the classic
+permission-wait alarm.
 
 ### The side panel tabs
 
@@ -144,6 +155,7 @@ A **sub-agent** gets three: `tool ทั้งหมด` (all tools), `ราย
 | `คุณภาพ: ต่ำ / กลาง / สูง` | render quality — low / medium / high |
 | `หมุนอัตโนมัติ: เปิด / ปิด` | auto-rotate — **off** by default |
 | `รีเซ็ตกล้อง` | reset the camera (rotation and target; see the note below) |
+| `เสียง AI: เปิด / ปิด` | toggle the same Thai event voice; the core pulses in time with cues/speech |
 | `ทดสอบฉาก` | scenario dropdown — **only appears in fixture mode** |
 | `← หน้าคลาสสิก` | back to the classic view |
 
@@ -421,6 +433,7 @@ Thai → English for everything the interface can put on screen. Grouped by wher
 | --- | --- | --- |
 | กรอง ชื่อ/โปรเจกต์… | Filter by name/project… | search placeholder |
 | เตือนเมื่อรอเรา | Alert me when it's waiting on us | checkbox |
+| เสียง AI: ปิด / แตะเพื่อเริ่ม / เปิด / กำลังพูด / ไม่รองรับ | AI voice: off / tap to start / on / speaking / unsupported | activity-voice button |
 | รีเซ็ตมุมมอง | Reset view | button |
 | กลับมุมมองเริ่มต้น และปลดหมุด node ที่ลากไว้ | Reset to the default view and unpin dragged nodes | that button's tooltip |
 | ปิด | Close | panel close button |

@@ -8,7 +8,8 @@
     "agent-activity-dashboard": "server.mjs"
   },
   "scripts": {
-    "start": "node server.mjs --open"
+    "start": "node server.mjs --open",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18.0.0"

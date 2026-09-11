@@ -9,6 +9,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23161b22'/%3E%3Crect x='7' y='10' width='18' height='14' rx='4' fill='%2358a6ff'/%3E%3Crect x='15' y='5' width='2' height='5' fill='%2358a6ff'/%3E%3Ccircle cx='16' cy='4' r='2.5' fill='%233fb950'/%3E%3Ccircle cx='12.5' cy='16' r='2' fill='%23eaf2ff'/%3E%3Ccircle cx='19.5' cy='16' r='2' fill='%23eaf2ff'/%3E%3Crect x='12' y='20' width='8' height='2' rx='1' fill='%23eaf2ff' opacity='.7'/%3E%3C/svg%3E"
     />
+    <link rel="stylesheet" href="/activity-audio.css" />
     <style>
       :root {
         --bg: #0d1117;
@@ -54,6 +55,10 @@
           --m-so: #0969da;
           --m-fa: #9a6700;
           --m-un: #6e7781;
+        }
+        .agent-voice-toggle {
+          /* #7df9ff is intentionally luminous on the dark HUD but unreadable on a white card. */
+          --agent-voice-speaking: #00636f;
         }
       }
 
@@ -139,8 +144,11 @@
       }
       .controls {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 8px;
+        min-width: 0;
+        max-width: 100%;
       }
       .controls input[type="search"] {
         width: 168px;
@@ -151,6 +159,17 @@
         color: var(--fg);
         font: inherit;
         font-size: 12.5px;
+      }
+      @media (max-width: 720px) {
+        .controls {
+          flex: 1 1 100%;
+          width: 100%;
+        }
+        .controls input[type="search"] {
+          flex: 1 1 150px;
+          width: auto;
+          min-width: 120px;
+        }
       }
       .toggle {
         display: inline-flex;
@@ -495,6 +514,41 @@
         stroke: var(--ok);
         animation: ping 1.6s ease-out infinite;
       }
+      /* The spoken-event halo belongs to its source session. Frame updates from the audio
+         engine drive its visual variables, so its size follows the Thai voice instead of looping on
+         an unrelated timer. Global/session-less cues fall back to the header meter. */
+      .hub .agent-voice-halo {
+        fill: none;
+        stroke: #7df9ff;
+        stroke-linecap: round;
+        opacity: 0;
+        pointer-events: none;
+        transform-box: fill-box;
+        transform-origin: center;
+        transition: opacity 70ms linear, transform 70ms linear, stroke-width 70ms linear;
+      }
+      .hub.voice-speaking .agent-voice-halo {
+        opacity: var(--voice-opacity, 0.72);
+        stroke-width: var(--voice-width, 4px);
+        stroke-dasharray: 7 5;
+        transform: scale(var(--voice-scale, 1.16));
+        filter: drop-shadow(0 0 5px rgba(125, 249, 255, 0.82));
+      }
+      .hub.voice-cue .agent-voice-halo {
+        animation: agent-hub-voice-cue 0.5s ease-out;
+      }
+      @keyframes agent-hub-voice-cue {
+        0% {
+          opacity: 0.9;
+          transform: scale(0.94);
+          stroke-width: 4px;
+        }
+        100% {
+          opacity: 0;
+          transform: scale(1.55);
+          stroke-width: 1px;
+        }
+      }
       @keyframes ping {
         0% {
           opacity: 0.55;
@@ -504,6 +558,23 @@
           opacity: 0;
           transform: scale(1.9);
         }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .hub.voice-speaking .agent-voice-halo {
+          opacity: 0.8;
+          transform: none;
+          stroke-width: 3px;
+          stroke-dasharray: none;
+        }
+        .hub.voice-cue .agent-voice-halo {
+          opacity: 0.72;
+          transform: none;
+        }
+      }
+      .agent-voice-toggle.has-live-level .agent-voice-meter > i {
+        animation: none;
+        height: var(--voice-meter-height, 7px);
+        transition: height 70ms linear;
       }
       /* paint-order:stroke puts a background-coloured halo UNDER the glyphs, so hub text stays
          readable even where a spoke passes behind it */
@@ -1074,6 +1145,17 @@
       <div class="controls">
         <input id="filter" type="search" placeholder="กรอง ชื่อ/โปรเจกต์…" />
         <label class="toggle"><input type="checkbox" id="beep" /> เตือนเมื่อรอเรา</label>
+        <button
+          type="button"
+          id="ai-voice"
+          class="agent-voice-toggle"
+          aria-pressed="false"
+          title="เปิดเสียงพูดสั้น ๆ สำหรับเหตุการณ์ใหม่ของ agent"
+        >
+          <span class="agent-voice-icon" aria-hidden="true">🔇</span>
+          <span class="agent-voice-label">เสียง AI: ปิด</span>
+          <span class="agent-voice-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        </button>
         <span class="conn" id="conn"><i></i> <span>ต่อ…</span></span>
       </div>
     </header>
@@ -1116,6 +1198,7 @@
       </aside>
     </main>
 
+    <script src="/activity-audio.js"></script>
     <script>
       "use strict";
 
@@ -2398,6 +2481,12 @@
       function buildHub() {
         const g = svg("g", { class: "node hub", tabindex: "0", role: "treeitem" });
         const refs = {
+          voice: svg("circle", {
+            class: "agent-voice-halo",
+            r: HUB_R + 12,
+            "stroke-width": 2,
+            "vector-effect": "non-scaling-stroke",
+          }),
           pulse: svg("circle", { class: "pulsering", r: HUB_R, "stroke-width": 2, "vector-effect": "non-scaling-stroke" }),
           ring: svg("circle", { class: "ring", r: HUB_R + 4, "stroke-width": 2, "vector-effect": "non-scaling-stroke" }),
           birth: svg("circle", { class: "birth", r: HUB_R, "stroke-width": 2, "vector-effect": "non-scaling-stroke" }),
@@ -2413,6 +2502,7 @@
         };
         g.append(
           refs.title,
+          refs.voice,
           refs.pulse,
           refs.ring,
           refs.birth,
@@ -3482,6 +3572,179 @@
       }
 
       // =====================================================================
+      // AI activity voice — shared event engine, Classic-specific visuals
+      // =====================================================================
+
+      const aiVoiceButton = $("#ai-voice");
+      const aiVoiceLabel = aiVoiceButton.querySelector(".agent-voice-label");
+      const aiVoiceIcon = aiVoiceButton.querySelector(".agent-voice-icon");
+      const aiVoiceBars = [...aiVoiceButton.querySelectorAll(".agent-voice-meter > i")];
+      const voiceCueTimers = new WeakMap();
+      let activeVoiceHub = null;
+      let voiceMeterResetTimer = null;
+      let activateVoiceFromGesture = false;
+      let activityVoiceState = { enabled: false, unlocked: false, supported: true, speaking: false, level: 0 };
+
+      function visibleVoiceHub(sessionId) {
+        if (!sessionId) return null;
+        const node = nodes.get(hubKey(sessionId));
+        return node && node.kind === "hub" && node.g.isConnected && node.refs.voice ? node : null;
+      }
+
+      function setVoiceMeterLevel(rawLevel, active) {
+        const level = Math.max(0, Math.min(1, Number(rawLevel) || 0));
+        const shape = [0.52, 1, 0.7, 0.88];
+        aiVoiceBars.forEach((bar, i) => {
+          bar.style.setProperty("--voice-meter-height", `${Math.round(3 + level * 9 * shape[i])}px`);
+        });
+        aiVoiceButton.classList.toggle("has-live-level", !!active);
+      }
+
+      function setVoiceHubLevel(node, rawLevel) {
+        if (!node) return;
+        const level = Math.max(0, Math.min(1, Number(rawLevel) || 0));
+        node.g.style.setProperty("--voice-opacity", String(0.28 + level * 0.62));
+        node.g.style.setProperty("--voice-width", `${2 + level * 3}px`);
+        node.g.style.setProperty("--voice-scale", String(1 + level * 0.24));
+      }
+
+      function clearActiveVoiceHub() {
+        if (!activeVoiceHub) return;
+        activeVoiceHub.g.classList.remove("voice-speaking");
+        activeVoiceHub.g.style.removeProperty("--voice-opacity");
+        activeVoiceHub.g.style.removeProperty("--voice-width");
+        activeVoiceHub.g.style.removeProperty("--voice-scale");
+        activeVoiceHub = null;
+      }
+
+      function pulseVoiceCue(target) {
+        const oldTimer = voiceCueTimers.get(target);
+        if (oldTimer) clearTimeout(oldTimer);
+        target.classList.remove("voice-cue", "is-cue");
+        void target.getBoundingClientRect();
+        const cls = target === aiVoiceButton ? "is-cue" : "voice-cue";
+        target.classList.add(cls);
+        voiceCueTimers.set(
+          target,
+          setTimeout(() => {
+            target.classList.remove(cls);
+            voiceCueTimers.delete(target);
+          }, 520),
+        );
+      }
+
+      function renderActivityVoiceState(state) {
+        activityVoiceState = state;
+        const active = state.enabled && state.supported;
+        aiVoiceButton.disabled = !state.supported;
+        aiVoiceButton.classList.toggle("is-enabled", active);
+        aiVoiceButton.classList.toggle("is-speaking", active && state.speaking);
+        aiVoiceButton.setAttribute("aria-pressed", String(active));
+        aiVoiceLabel.textContent = !state.supported
+          ? "เสียง AI: ไม่รองรับ"
+          : state.enabled && !state.unlocked
+            ? "เสียง AI: แตะเพื่อเริ่ม"
+            : `เสียง AI: ${state.enabled ? (state.speaking ? "กำลังพูด" : "เปิด") : "ปิด"}`;
+        aiVoiceIcon.textContent = active ? "🔊" : "🔇";
+        aiVoiceButton.title = !state.supported
+          ? "เบราว์เซอร์นี้ไม่รองรับ Web Audio หรือเสียงพูด"
+          : state.enabled && !state.unlocked
+            ? "เสียง AI เปิดอยู่ — โต้ตอบกับหน้าเว็บหนึ่งครั้งเพื่อเริ่มเสียง"
+            : state.voiceName
+              ? `เสียงเหตุการณ์ใหม่ · ${state.voiceName}`
+              : "เสียงพูดสั้น ๆ สำหรับเหตุการณ์ใหม่ของ agent";
+        if (!state.enabled || !state.speaking) {
+          aiVoiceButton.classList.remove("is-voice-fallback");
+          setVoiceMeterLevel(0, false);
+          if (!state.speaking) clearActiveVoiceHub();
+        }
+      }
+
+      function visualizeActivityVoice(frame) {
+        const phase = frame.phase;
+        const hub = visibleVoiceHub(frame.sessionId);
+
+        if (phase === "cue") {
+          // A filtered, just-ended, or global session has no hub, so its cue stays visible in
+          // the header instead of disappearing into a detached SVG node.
+          pulseVoiceCue(hub ? hub.g : aiVoiceButton);
+          if (!hub) {
+            aiVoiceButton.classList.add("is-voice-fallback");
+            setVoiceMeterLevel(frame.level || 0.68, true);
+            clearTimeout(voiceMeterResetTimer);
+            voiceMeterResetTimer = setTimeout(() => {
+              if (!activityVoiceState.speaking) {
+                aiVoiceButton.classList.remove("is-voice-fallback");
+                setVoiceMeterLevel(0, false);
+              }
+            }, 360);
+          }
+          return;
+        }
+
+        if (phase === "start" || phase === "frame" || phase === "boundary") {
+          if (activeVoiceHub !== hub) {
+            clearActiveVoiceHub();
+            activeVoiceHub = hub;
+          }
+          if (hub) {
+            hub.g.classList.add("voice-speaking");
+            setVoiceHubLevel(hub, frame.level);
+          }
+          aiVoiceButton.classList.toggle("is-voice-fallback", !hub);
+          setVoiceMeterLevel(frame.level, true);
+          return;
+        }
+
+        if (phase === "end") {
+          clearActiveVoiceHub();
+          aiVoiceButton.classList.remove("is-voice-fallback");
+          setVoiceMeterLevel(0, false);
+        }
+      }
+
+      function rememberVoiceActivationGesture(event) {
+        const isVoiceTarget = aiVoiceButton.contains(event.target);
+        const isActivationKey = event.type !== "keydown" || event.key === "Enter" || event.key === " ";
+        // Keep the pre-gesture state so activation does not depend on capture-listener ordering
+        // (the current engine reserves toggle gestures for this click handler as well).
+        activateVoiceFromGesture =
+          isVoiceTarget && isActivationKey && activityVoiceState.enabled && !activityVoiceState.unlocked;
+      }
+
+      document.addEventListener("pointerdown", rememberVoiceActivationGesture, true);
+      document.addEventListener("keydown", rememberVoiceActivationGesture, true);
+
+      const activityAudio = window.AgentActivityAudio.create({
+        onState: renderActivityVoiceState,
+        onVisual: visualizeActivityVoice,
+      });
+
+      aiVoiceButton.addEventListener("click", () => {
+        const state = activityAudio.getState();
+        const activateOnly = activateVoiceFromGesture || (state.enabled && !state.unlocked);
+        activateVoiceFromGesture = false;
+        activityAudio.setEnabled(activateOnly ? true : !state.enabled, { userGesture: true, preview: true });
+      });
+
+      window.addEventListener(
+        "pagehide",
+        (event) => {
+          // BFCache restores this exact document without re-running the script. Keep the engine
+          // wired for Back/Forward, but stop the current voice while another page is visible.
+          if (event.persisted) {
+            activityAudio.cancel("bfcache");
+            return;
+          }
+          clearTimeout(voiceMeterResetTimer);
+          document.removeEventListener("pointerdown", rememberVoiceActivationGesture, true);
+          document.removeEventListener("keydown", rememberVoiceActivationGesture, true);
+          clearActiveVoiceHub();
+          activityAudio.dispose();
+        },
+      );
+
+      // =====================================================================
       // alerting
       // =====================================================================
 
@@ -3951,6 +4214,7 @@
           $("#conn").classList.add("on");
           $("#conn").lastElementChild.textContent = "fixture";
           render();
+          activityAudio.ingest(snapshot);
           return;
         }
         const es = new EventSource("/api/stream");
@@ -3965,6 +4229,9 @@
             return;
           }
           render();
+          // Ingest only here, once per fresh SSE frame. render() is also called by search,
+          // resize, zoom and panel actions, none of which is a new audible agent event.
+          activityAudio.ingest(snapshot);
         };
         es.onerror = () => {
           $("#conn").classList.remove("on");

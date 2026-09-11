@@ -147,6 +147,8 @@ const store = createStore({
 
 /* ───────────────────────── HUD ───────────────────────── */
 
+let activityAudio = null;
+
 const hud = createHud(hudRoot, {
   fixtureMode,
   onSelect: (key) => selectNode(key, { focus: false }),
@@ -160,6 +162,10 @@ const hud = createHud(hudRoot, {
       fitDistance = fitDistanceFor();
       controls.distance = fitDistance;
     } else if (name === "focus") selectNode(value, { focus: true });
+    else if (name === "voice" && activityAudio) {
+      const state = activityAudio.setEnabled(!!value, { userGesture: true, preview: true });
+      hud.setVoiceState(state);
+    }
     else if (name === "scenario" && fixture) {
       fixture.setScenario(value);
       hud.toast(`สลับสถานการณ์: ${value}`, "info");
@@ -204,6 +210,54 @@ function bumpPulse(v) {
   ctx.pulse = Math.min(1.5, ctx.pulse + v);
 }
 
+/*
+ * เสียงพูดขับเฉพาะ HUD กับก้อนสมองตรงกลาง ไม่แตะ controls/stars/calmCtx เลย
+ * จึงเห็นจังหวะคำพูดได้โดยไม่ทำให้กล้องหรือฉากหลังไหลตามเสียง
+ */
+function voiceVisualHex(kind) {
+  if (kind === "error" || kind === "blocked") return SEMANTIC_HEX.bad;
+  if (kind === "denied") return SEMANTIC_HEX.deny;
+  if (kind === "spawn") return SEMANTIC_HEX.spawn;
+  if (kind === "finish" || kind === "tool-end" || kind === "session-end") return SEMANTIC_HEX.ok;
+  if (kind === "prompt" || kind === "say") return SEMANTIC_HEX.white;
+  return SEMANTIC_HEX.core;
+}
+
+function syncVoiceVisual(frame) {
+  hud.setVoiceVisual(frame);
+  if (!frame || !frame.phase) return;
+  const level = Math.max(0, Math.min(1, Number(frame.level) || 0));
+  if (frame.phase === "cue") {
+    brain.excite(0.12 + level * 0.16);
+    field.toolStart({ sessionId: frame.sessionId, agentId: frame.agentId });
+    field.surge(0.12 + level * 0.12);
+    brain.shockwave({
+      hex: voiceVisualHex(frame.kind),
+      strength: 0.28 + level * 0.26,
+      reach: 1.65 + level * 0.45,
+      speed: 1.45,
+    });
+  } else if (frame.phase === "start" || frame.phase === "boundary") {
+    brain.excite(0.07 + level * 0.11);
+    field.toolStart({ sessionId: frame.sessionId, agentId: frame.agentId });
+  } else if (frame.phase === "frame") {
+    brain.excite(0.012 + level * 0.022);
+    /* ต่ออายุแสงของโหนดต้นทางตลอดช่วงพูด; หยุดเองทันทีเมื่อ engine เลิกส่ง frame */
+    field.toolStart({ sessionId: frame.sessionId, agentId: frame.agentId });
+  }
+}
+
+const activityAudioApi = globalThis.AgentActivityAudio;
+if (activityAudioApi && typeof activityAudioApi.create === "function") {
+  activityAudio = activityAudioApi.create({
+    onState: (state) => hud.setVoiceState(state),
+    onVisual: syncVoiceVisual,
+  });
+  hud.setVoiceState(activityAudio.getState());
+} else {
+  hud.setVoiceState({ enabled: false, speaking: false, level: 0, supported: false });
+}
+
 store.on("connect", () => {
   ctx.connected = true;
   hud.setConnected(true);
@@ -220,6 +274,8 @@ store.on("disconnect", () => {
 
 store.on("snapshot", (snapshot, meta) => {
   lastSnapshot = snapshot;
+  /* engine ใช้เฟรมแรกเป็น baseline แบบเงียบ แล้ว diff ทุก snapshot ถัดไปเพื่อส่งเสียงทุก event ใหม่ */
+  if (activityAudio) activityAudio.ingest(snapshot);
   field.syncSnapshot(snapshot, { silent: meta && meta.first });
   hud.update(snapshot, ctx);
   /* นัดจัดกรอบกล้อง "ครั้งเดียวในชีวิตของหน้านี้" หลังข้อมูลชุดแรกมาถึงและโหนดวิ่งเข้าที่แล้ว
@@ -375,6 +431,14 @@ canvas.addEventListener("pointerup", () => {
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") selectNode(null);
   else if (e.key === " ") {
+    const target = e.target;
+    if (
+      target &&
+      typeof target.closest === "function" &&
+      target.closest("button, input, select, textarea, a, [contenteditable='true']")
+    ) {
+      return;
+    }
     controls.autoRotate = !controls.autoRotate;
     e.preventDefault();
   }
@@ -554,5 +618,33 @@ if (fixtureMode) {
   hud.toast("โหมดข้อมูลจำลอง — ไม่ได้ต่อกับ session จริง", "warn");
 }
 
+/* หยุดเสียง/คิว/ตัวจับเวลาเมื่อเปลี่ยนหน้า ไม่ให้คำพูดตามไปทับหน้า Classic */
+function disposeActivityAudio() {
+  if (!activityAudio) return;
+  activityAudio.dispose();
+  activityAudio = null;
+  hud.setVoiceState({ enabled: false, speaking: false, level: 0 });
+}
+window.addEventListener("pagehide", (event) => {
+  // A BFCache page resumes without re-running this module. Keep its controller alive, but cancel
+  // the current utterance so it cannot talk over the page the user navigated to.
+  if (event.persisted) {
+    if (activityAudio) activityAudio.cancel("bfcache");
+    return;
+  }
+  disposeActivityAudio();
+});
+
 /* เปิดทางให้เปิด DevTools แล้วแกะดูสถานะได้โดยไม่ต้องแก้โค้ด */
-window.__neural = { store, brain, field, stars, bloom, controls, hud, ctx, get snapshot() { return lastSnapshot; } };
+window.__neural = {
+  store,
+  brain,
+  field,
+  stars,
+  bloom,
+  controls,
+  hud,
+  ctx,
+  get audio() { return activityAudio; },
+  get snapshot() { return lastSnapshot; },
+};

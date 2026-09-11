@@ -6,7 +6,7 @@
 //
 // สัญญากับ main.js (ห้ามเปลี่ยน signature):
 //   export function createHud(root, options = {}) -> { update, tick, pushFeed, setSelected,
-//     setConnected, setFps, setHint, toast, dispose, get selected() }
+//     setConnected, setFps, setHint, setVoiceState, setVoiceVisual, toast, dispose, get selected() }
 
 "use strict";
 
@@ -287,6 +287,9 @@ export function createHud(root, options = {}) {
   /* ต้องตรงกับค่าเริ่มต้นใน main.js (ปิดไว้ตั้งแต่ 2026-09-09) ไม่งั้นป้ายปุ่มจะโกหกตั้งแต่เฟรมแรก */
   let autorotateOn = false;
   let connectedState = false;
+  let voiceState = { enabled: false, unlocked: false, speaking: false, level: 0, supported: true };
+  let activateVoiceFromGesture = false;
+  let voiceCueTimer = null;
   let lastMoodShown = null;
   let lastFpsShown = null;
   let lastQualityShown = null;
@@ -348,6 +351,9 @@ export function createHud(root, options = {}) {
     root.appendChild(overlay);
 
     document.addEventListener("keydown", onKeyDown);
+    /* จำ state ก่อน gesture เพื่อไม่ให้พฤติกรรมปุ่มขึ้นกับลำดับ capture listener */
+    document.addEventListener("pointerdown", rememberVoiceActivationGesture, true);
+    document.addEventListener("keydown", rememberVoiceActivationGesture, true);
     observeBoundaries();
   }
 
@@ -374,6 +380,12 @@ export function createHud(root, options = {}) {
 
   function onKeyDown(e) {
     if (e.key === "Escape" && selectedKey) closeSelection();
+  }
+
+  function rememberVoiceActivationGesture(e) {
+    const isVoiceTarget = !!(refs.voiceBtn && e.target && refs.voiceBtn.contains(e.target));
+    const isActivationKey = e.type !== "keydown" || e.key === "Enter" || e.key === " ";
+    activateVoiceFromGesture = isVoiceTarget && isActivationKey && voiceState.enabled && !voiceState.unlocked;
   }
 
   // ---- แถบบนซ้าย: ตราสัญลักษณ์ + สถานะเชื่อมต่อ ----
@@ -551,7 +563,39 @@ export function createHud(root, options = {}) {
     resetBtn.type = "button";
     resetBtn.addEventListener("click", () => safeCall(onCommand, "reset"));
 
-    controls.append(qualityGroup, autorotateBtn, resetBtn);
+    const voiceBtn = el("button", "agent-voice-toggle hud-btn-voice");
+    voiceBtn.type = "button";
+    voiceBtn.setAttribute("aria-label", "เปิดหรือปิดเสียงเหตุการณ์ของ AI");
+    voiceBtn.setAttribute("aria-pressed", "false");
+    const voiceIcon = el("span", "agent-voice-icon", "🔇");
+    voiceIcon.setAttribute("aria-hidden", "true");
+    const voiceLabel = el("span", "agent-voice-label hud-voice-label", "เสียง AI: ปิด");
+    const voiceMeter = el("span", "agent-voice-meter");
+    voiceMeter.setAttribute("aria-hidden", "true");
+    const voiceBars = [];
+    for (let i = 0; i < 4; i += 1) {
+      const bar = el("i");
+      voiceMeter.append(bar);
+      voiceBars.push(bar);
+    }
+    voiceBtn.append(voiceIcon, voiceLabel, voiceMeter);
+    voiceBtn.addEventListener("click", () => {
+      /*
+       * จำ state ก่อน gesture ไว้เพื่อกัน capture-listener อื่นเปลี่ยน state ก่อน click มาถึง
+       * (engine ปัจจุบันสงวน gesture ของปุ่มไว้ให้ handler นี้อยู่แล้ว) แล้วส่ง true ซ้ำเพื่อ
+       * activate/preview; click ครั้งถัดไปจึงค่อยปิดตามปกติ
+       */
+      const activateOnly = activateVoiceFromGesture || (voiceState.enabled && !voiceState.unlocked);
+      activateVoiceFromGesture = false;
+      safeCall(onCommand, "voice", activateOnly ? true : !voiceState.enabled);
+    });
+    refs.voiceBtn = voiceBtn;
+    refs.voiceIcon = voiceIcon;
+    refs.voiceLabel = voiceLabel;
+    refs.voiceMeter = voiceMeter;
+    refs.voiceBars = voiceBars;
+
+    controls.append(qualityGroup, autorotateBtn, resetBtn, voiceBtn);
 
     if (fixtureMode) {
       const scenarioWrap = el("div", "hud-controls-group");
@@ -1117,6 +1161,65 @@ export function createHud(root, options = {}) {
     applyFps(n);
   }
 
+  /** สะท้อนสถานะจริงจาก shared audio engine; เรียกซ้ำได้ทั้งตอนเปิด/ปิดและระหว่างกำลังพูด */
+  function setVoiceState(next) {
+    const state = next && typeof next === "object" ? next : {};
+    voiceState = {
+      ...voiceState,
+      ...state,
+      enabled: state.enabled === undefined ? voiceState.enabled : !!state.enabled,
+      speaking: state.speaking === undefined ? voiceState.speaking : !!state.speaking,
+      level: state.level === undefined ? voiceState.level : clamp(Number(state.level) || 0, 0, 1),
+      supported: state.supported === undefined ? voiceState.supported : !!state.supported,
+    };
+    if (!refs.voiceBtn) return;
+    const enabled = voiceState.enabled && voiceState.supported;
+    refs.voiceBtn.disabled = !voiceState.supported;
+    refs.voiceBtn.classList.toggle("is-enabled", enabled);
+    refs.voiceBtn.classList.toggle("is-speaking", enabled && voiceState.speaking);
+    refs.voiceBtn.classList.toggle("has-live-level", enabled && voiceState.speaking);
+    refs.voiceBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
+    const meterShape = [0.52, 1, 0.7, 0.88];
+    refs.voiceBars.forEach((bar, i) => {
+      bar.style.setProperty("--voice-meter-height", `${Math.round(3 + voiceState.level * 9 * meterShape[i])}px`);
+    });
+    refs.voiceIcon.textContent = voiceState.enabled ? "🔊" : "🔇";
+    refs.voiceLabel.textContent = !voiceState.supported
+      ? "เสียง AI: ไม่รองรับ"
+      : voiceState.enabled && !voiceState.unlocked
+        ? "เสียง AI: แตะเพื่อเริ่ม"
+        : `เสียง AI: ${voiceState.enabled ? (voiceState.speaking ? "กำลังพูด" : "เปิด") : "ปิด"}`;
+    if (!voiceState.supported) {
+      refs.voiceBtn.title = "เบราว์เซอร์นี้ไม่รองรับ Web Speech หรือ Web Audio";
+    } else if (voiceState.enabled && !voiceState.unlocked) {
+      refs.voiceBtn.title = "เสียง AI เปิดอยู่ — โต้ตอบกับหน้าเว็บหนึ่งครั้งเพื่อเริ่มเสียง";
+    } else {
+      refs.voiceBtn.title = voiceState.enabled
+        ? "ปิดเสียงพูดและเอฟเฟกต์เหตุการณ์"
+        : "เปิดเสียงพูดภาษาไทยและเอฟเฟกต์เหตุการณ์";
+    }
+  }
+
+  /** เฟรมภาพจาก audio engine — meter ขยับตามจังหวะพูดและกระพริบหนึ่งครั้งต่อ cue ใหม่ */
+  function setVoiceVisual(frame) {
+    if (!frame || typeof frame !== "object") return;
+    const active = !["end", "cancel", "disabled"].includes(frame.phase);
+    setVoiceState({
+      speaking: frame.phase === "cue" ? voiceState.speaking : active,
+      level: frame.phase === "end" ? 0 : frame.level,
+    });
+    if (frame.phase !== "cue" || !refs.voiceBtn) return;
+    refs.voiceBtn.classList.remove("is-cue");
+    // บังคับ reflow เล็ก ๆ เพื่อให้ cue ที่มาติดกันเริ่ม animation ใหม่ทุกเหตุการณ์
+    void refs.voiceBtn.offsetWidth;
+    refs.voiceBtn.classList.add("is-cue");
+    if (voiceCueTimer !== null) clearTimeout(voiceCueTimer);
+    voiceCueTimer = setTimeout(() => {
+      voiceCueTimer = null;
+      if (refs.voiceBtn) refs.voiceBtn.classList.remove("is-cue");
+    }, 260);
+  }
+
   function setHint(text) {
     if (text) {
       refs.hint.textContent = text;
@@ -1146,6 +1249,12 @@ export function createHud(root, options = {}) {
 
   function dispose() {
     document.removeEventListener("keydown", onKeyDown);
+    document.removeEventListener("pointerdown", rememberVoiceActivationGesture, true);
+    document.removeEventListener("keydown", rememberVoiceActivationGesture, true);
+    if (voiceCueTimer !== null) {
+      clearTimeout(voiceCueTimer);
+      voiceCueTimer = null;
+    }
     if (boundaryObserver) {
       boundaryObserver.disconnect();
       boundaryObserver = null;
@@ -1165,6 +1274,8 @@ export function createHud(root, options = {}) {
     setConnected,
     setFps,
     setHint,
+    setVoiceState,
+    setVoiceVisual,
     toast,
     dispose,
     get selected() {
