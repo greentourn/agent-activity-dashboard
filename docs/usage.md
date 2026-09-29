@@ -9,9 +9,10 @@ in whatever language you and your agents work in.
 
 **Contents**
 
-- [The two views](#the-two-views)
+- [The three views](#the-three-views)
 - [Classic view](#classic-view)
 - [NEURAL CORE (3D view)](#neural-core-3d-view)
+- [PIXEL OFFICE (pixel view)](#pixel-office-pixel-view)
 - [What the statuses mean](#what-the-statuses-mean)
 - [The quota bar](#the-quota-bar)
 - [Demo mode](#demo-mode)
@@ -21,20 +22,23 @@ in whatever language you and your agents work in.
 
 ---
 
-## The two views
+## The three views
 
-| | Classic | NEURAL CORE |
-| --- | --- | --- |
-| URL | `/` | `/brain.html` |
-| Rendering | 2D SVG | 3D WebGL (three.js, vendored) |
-| Best for | exact numbers, walking tool calls, drilling into errors | the shape of the system at a glance |
-| Needs WebGL | no | **yes** |
-| Data source | the same `/api/stream` SSE feed | the same `/api/stream` SSE feed |
+| | Classic | NEURAL CORE | PIXEL OFFICE |
+| --- | --- | --- | --- |
+| URL | `/` | `/brain.html` | `/pixel.html` |
+| Rendering | 2D SVG | 3D WebGL (three.js, vendored) | 2D Canvas pixel art, every sprite drawn in code (no image files) |
+| Best for | exact numbers, walking tool calls, drilling into errors | the shape of the system at a glance | who is doing what right now, told as a story |
+| Needs WebGL | no | **yes** | no |
+| Data source | the same `/api/stream` SSE feed | the same `/api/stream` SSE feed | the same `/api/stream` SSE feed |
 
-`--open` always opens **NEURAL CORE** (the 3D view). There is no link from the classic view to the
-3D one — the server prints both URLs in its startup banner, so pick from there. The 3D view has a
-`← หน้าคลาสสิก` ("classic view") link in its bottom-right control bar, and shows that same link on
-its own when the browser has no WebGL.
+`--open` always opens **NEURAL CORE** (the 3D view); the server also prints all three URLs in its
+startup banner. Every view links to the other two: the classic view has `NEURAL CORE` and
+`PIXEL OFFICE` links at the end of its header (after the connection indicator). The 3D view
+has `← หน้าคลาสสิก` ("classic view") and `PIXEL OFFICE` links in its bottom-right control bar, and
+shows the classic link on its own when the browser has no WebGL. The pixel view has `คลาสสิก`
+("classic") and `NEURAL CORE` links at the top right, plus a `ดูละเอียดในหน้าคลาสสิก →` ("see full
+detail in the classic view") link at the bottom of its detail panel.
 
 ---
 
@@ -77,6 +81,7 @@ its own when the browser has no WebGL.
 | `☐ เตือนซ้ำเมื่อรอฉัน` | repeat the wait-for-user alert until the waiting state clears |
 | `เสียง AI — ปิด / เอฟเฟกต์ / พูด+เอฟเฟกต์` | choose off, event effects only, or Thai speech plus effects |
 | `รีเซ็ตมุมมอง` | reset zoom/pan and unpin dragged nodes |
+| `NEURAL CORE` · `PIXEL OFFICE` | end of the header: switch to the 3D view or the pixel office (same stream, nothing to restart) |
 | click a node | open the side panel for that session or sub-agent |
 | click a row in the panel | expand it (full tool input, error text, deny reason) |
 | click a row in the waste table | drill into that error category |
@@ -87,7 +92,7 @@ its own when the browser has no WebGL.
 Only the audio mode and `เตือนซ้ำเมื่อรอฉัน` preference are remembered between reloads; no activity
 or transcript data is stored in your browser.
 
-The shared Classic/NEURAL CORE audio engine has three modes. `ปิด` (off) is the default and silences
+The audio engine shared by all three views has three modes. `ปิด` (off) is the default and silences
 everything. `เอฟเฟกต์` (effects) plays cues without speech. `พูด+เอฟเฟกต์` (speech + effects) adds
 brief Thai announcements after the user starts audio with a click. Every newly observed event gets
 a recognisable cue for its event family with subtle variation; speech is reserved for meaningful
@@ -174,6 +179,7 @@ A **sub-agent** gets three: `tool ทั้งหมด` (all tools), `ราย
 | `เตือนซ้ำเมื่อรอฉัน: เปิด / ปิด` | enable or disable repeated wait-for-user reminders |
 | `ทดสอบฉาก` | scenario dropdown — **only appears in fixture mode** |
 | `← หน้าคลาสสิก` | back to the classic view |
+| `PIXEL OFFICE` | switch to the pixel office view |
 
 **Mouse:** left-drag orbits · right-drag (or `Shift` + left-drag) pans · wheel zooms · two fingers
 pan and pinch. There is momentum, so it keeps gliding after you let go. A click within 6 px of a
@@ -186,6 +192,232 @@ node selects it and focuses the camera on it.
 
 > If the browser cannot start WebGL you get a message saying so, with a link back to the classic
 > view. A watchdog also warns if no first frame has arrived after 12 seconds — try `?quality=low`.
+
+---
+
+## PIXEL OFFICE (pixel view)
+
+A 2D pixel-art office that tells the same data as a story. Every Claude Code session is a **room**,
+its main agent is the **lead** (`หัวหน้า`), and every running sub-agent is a **helper**
+(`ผู้ช่วย`). Characters walk to the station that matches the tool they are really running, so you
+can tell who is reading, searching, running commands or waiting on you from where they stand. It is
+plain Canvas 2D — no WebGL — and every sprite is drawn in code, so there are no image files and
+nothing to download.
+
+### Layout
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│ PIXEL OFFICE ● live  [rooms · busy · waiting · helpers · tools · tokens]   │
+│                [audio mode ▾] [☐ repeat reminders]  [classic] [NEURAL CORE]│
+├──────────────────────────────────────────────────┬─────────────────────────┤
+│  OP  my-project  thinking    ← room nameplate    │ [−] ×2 [+] [fit]        │
+│ ┌──────────────────────────────────────────────┐ │ [captions: auto] [?]    │
+│ │ door · stations along the back wall · phone  │ ├─────────────────────────┤
+│ │ ▭ ▭ ▭ ▭ ▭  helper desks        lead's corner │ │ detail panel            │
+│ │ ▭ ▭ ▭ ▭ ▭                      rug · couch   │ │ (click a character)     │
+│ └──────────────────────────────────────────────┘ ├─────────────────────────┤
+├───────────────────────────────────┐              │ ห้อง (room list)         │
+│ event log (60 rows, click a row)  │              │                         │
+└───────────────────────────────────┴──────────────┴─────────────────────────┘
+```
+
+On a narrow screen (760 px or less) the stat chips and audio controls fold away behind a `สรุป ▾`
+("summary") button — which still shows how many sessions are waiting on you — the event log and the
+room list start collapsed, and the detail panel becomes a bottom sheet.
+
+### The office
+
+- **One room per session**, laid out in a grid sized to the part of the screen the panels do not
+  cover (three or four rooms on a 1440×900 screen come out as 2×2). A room keeps its place: new
+  rooms are added, existing ones are not reshuffled.
+- A **nameplate** floats above each room: the model tag, the room name (session title → name →
+  project folder → first 8 characters of the session id) and a one-word state — `ทำงาน`, `คุมงาน`,
+  `รอคุณ`, `คิด`, `ติดด่าน`, `ว่าง`, `ไม่ทราบ` or `ปิดแล้ว` (see the
+  [glossary](#9-pixel-office--top-bar-tools-rooms-and-event-log)). From zoom ×2 up it also shows the
+  project folder, git branch and surface when they fit. At ×1, where the captions over characters
+  are hidden, it shows what the lead is doing instead, plus `· ผู้ช่วย N` (N helpers working). Click
+  a nameplate to go to that room.
+- Along the **back wall**, left to right: the door, mailbox, bookshelf, filing cabinet, terminal,
+  whiteboard, globe kiosk, toolbox, printer, coffee machine, CCTV camera and phone booth. A
+  **scoreboard** on the wall shows finished/total helpers for the session, and turns orange once any
+  of them has failed.
+- The **lead's corner** is on the right: a big desk, a rug and a couch. **Helper desks** fill the
+  floor in rows of five. A room grows (and later shrinks) ten desks at a time, and a very big room
+  gets extra side doors in its left wall so helpers do not all queue at one door.
+- A **closed session** keeps its room with the lights off and a `ปิดแล้ว · N นาทีก่อน` ("closed · N
+  min ago") sign for `--stale-minutes` (30 by default), exactly as long as the other views keep it.
+
+### The characters
+
+- The **lead** wears a tie and a headset. Each **helper** gets glasses, a cap, headphones or a
+  beanie from its agent type, so helpers of the same type dress alike.
+- **Every agent always looks the same.** Skin, hair and hairstyle are derived from its id, so you
+  can follow one character around the room, and it looks the same again after a reload.
+- **Shirt colour is the model:**
+
+| Shirt | Tag | Model |
+| --- | --- | --- |
+| green | `HA` | Haiku |
+| blue | `SO` | Sonnet |
+| purple | `OP` | Opus |
+| orange | `FA` | Fable |
+| grey | — | unknown (no reply from the model in the transcript yet) |
+
+Only **running** sub-agents become characters. A helper that had already finished the first time
+the page saw it is not drawn — it only counts on the scoreboard.
+
+### Stations — where each tool is worked
+
+| Station | Tools | What you see |
+| --- | --- | --- |
+| 📚 bookshelf | `Read` | reading a book |
+| 🗄️ filing cabinet | `Grep`, `Glob` | reaching into the drawers |
+| 🖥️ terminal | `Bash`, `PowerShell` | typing, standing up |
+| ✏️ own desk | `Edit`, `MultiEdit`, `NotebookEdit`, `Write` — and any tool not in this table | sitting and typing |
+| 🌐 globe kiosk | `WebFetch`, `WebSearch` | typing at the kiosk |
+| 📋 whiteboard | `TodoWrite`, `Workflow` | writing on the board |
+| 🧰 toolbox | `Skill`, `ToolSearch`, every `mcp__*` tool | at the toolbox, picking a tool or plugging in |
+| 📹 CCTV | `Monitor` | standing under the camera, looking up |
+| 🖨️ printer | `Artifact` | at the printer |
+| ☎️ phone booth | `AskUserQuestion` | on the phone |
+| 🤖 the floor | `Agent`, `Task` | the lead walks between its helpers' desks; a helper that hires helpers of its own stands beside its desk |
+
+The lead goes where its **first running tool that is not `Agent`/`Task` or `AskUserQuestion`**
+belongs. What the lead does in every other state:
+
+| Session status | Where the lead is | Signs |
+| --- | --- | --- |
+| ⚙️ tool | at the station of that tool | caption: the tool, its target and a clock |
+| 🤖 delegating | walks between two or three of its helpers' desks, pausing at each | `สั่งงานผู้ช่วย · ทำงานอยู่ N คน` ("delegating · N working") |
+| 🙋 waiting — a question | phone booth, on the phone | blinking ❓, the phone rings |
+| 🙋 waiting — permission | phone booth, hand raised | blinking ❗ |
+| 💭 thinking | at the whiteboard, alternating writing and pondering | thought bubble; a 💡 for a moment when a thinking block arrives |
+| ⛔ blocked | slumped at its desk | rain cloud overhead, ⚠️ beside the head |
+| 😴 idle | at the coffee machine; after 45 s idle it naps on the couch | ☕, then Zzz |
+| closed | walks out through the door, then the lights go off | `ปิดแล้ว · N นาทีก่อน` sign |
+
+**Helpers do not run across the room for every call.** A helper's tool changes every couple of
+seconds, and a walk from a back desk can take several, so a helper only gets up when it will
+plausibly arrive in time — the station is within 8 tiles, or the tool has already been running long
+enough to cover the walk. Otherwise it does that station's work at its own desk, with the station's
+icon in a thought bubble. At most three characters work at or queue for one station; the rest work
+at their desks the same way. A helper with no tool running sits and thinks at its desk.
+
+### Story beats
+
+- **A prompt arrives** as a letter that flies in through the door to the mailbox. The lead walks
+  over and reads it, with `📬 คำสั่งใหม่: "…"` ("new prompt") and the real prompt text shown above
+  the caption while it does.
+- **Hired helpers come in through the door** (in big rooms, the door nearest their desk) a few at a
+  time, and take a free desk.
+- **An error** makes the character jolt, with sparks at the station (smoke at the terminal); a
+  denial adds a red stamp.
+- **A finished helper celebrates** (sparkles) or **looks sad** on failure (a small rain cloud),
+  carries its report to **whoever hired it** — the lead, or the helper that spawned it — and hands
+  it over. The hirer answers with a heart or ✓, or a ✗ if the work failed. Then the helper walks out
+  through the door. If the hirer is far away, or the room is full and other helpers are waiting to
+  come in, it hands the report over from where it stands (the paper flies across the room) and
+  vanishes in a puff. A helper that was stopped just leaves.
+- **What an agent says** (its short text replies) appears in a speech bubble above it for a few
+  seconds, and whenever the audio engine plays a cue or speaks, the character the event is about
+  (or its room's lead) mouths along.
+- **A session that ends**: the lead walks out through the door and the room's lights go off.
+
+The first snapshot is a silent baseline, as it is for audio: everyone is placed straight at their
+spot, with no walk-ins and no story lines — just one `💡 เปิดไฟออฟฟิศ: …` ("office lights on") line in
+the event log. Everything after that is narrated there, one line per beat, and bursts (a storm
+finishing dozens of helpers at once) are combined into one line per room.
+
+### Captions — honest by design
+
+- A caption **always names the real current tool or state** from the latest snapshot, with a clock
+  — for example `📖 อ่าน server.mjs 0:12` ("read server.mjs"). The picture can lag a little behind
+  the data (people have to walk), the caption does not.
+- A tool that **started and ended between two polls** (~700 ms) is never seen as running. While the
+  lead is thinking, the office may **replay** it — the lead briefly walks to that station — but the
+  caption then reads `✓ เมื่อกี้ · …` ("✓ just now · …") and the detail panel marks it
+  `ภาพย้อนหลัง` ("replay"). Real state always wins: a replay is dropped the moment the lead is no
+  longer thinking.
+- **Caption modes** (the `ป้าย:` button): `อัตโนมัติ` (auto) shows the leads' captions from zoom ×2
+  and a helper's when you select or hover it, or at zoom ×4 (an icon chip at ×4, full text from ×5);
+  `ทั้งหมด` (all) shows every caption; `ปิด` (off) hides them all. Captions give way to each other so
+  they never pile up on someone's face — the selected and hovered characters always win.
+
+### The camera
+
+The camera **only moves when you move it** — drag, wheel, `−`/`+`, `จัดกรอบ` (fit), arrow keys, or
+clicking something that means "go there" (a room in the list, a nameplate, an event-log row, a
+double-clicked character). The one exception is a single automatic fit when the first data with a
+room arrives. A new room that appears off-screen gets a toast (at most one every 45 s), not a camera
+move.
+
+If a room that is **waiting on you or blocked** has its lead out of view — off-screen or hidden
+under a panel — a small badge appears at the edge of the visible area pointing towards it, and the
+room's row in the `ห้อง` list blinks. Click either one to go there.
+
+Zoom goes in whole steps from ×1 to ×8, so every pixel of the art stays a crisp square.
+
+### Controls
+
+| Control | What it does |
+| --- | --- |
+| drag the scene | pan |
+| wheel · `−` / `+` | zoom one step (×1–×8); the wheel zooms around the cursor |
+| `จัดกรอบ` | fit every room in view |
+| `ป้าย: อัตโนมัติ / ทั้งหมด / ปิด` | caption mode: auto / all / off — click to cycle |
+| `?` | the legend, `อ่านฉากออฟฟิศ` ("reading the office scene"): characters, stations, shirt colours, signs |
+| click a character | select it and open the detail panel |
+| double-click a character | select it and centre the camera on it (double-click an empty spot in a room = go to that room) |
+| click empty floor | deselect |
+| click a nameplate or an edge badge | go to that room |
+| `ห้อง` list | click a room to go to it; click the header to fold / unfold the list |
+| `บันทึกเหตุการณ์` rows | click a row to select that event's character and go to it; click the header to fold / unfold |
+| `เสียง AI — ปิด / เอฟเฟกต์ / พูด+เอฟเฟกต์` | the shared audio mode |
+| `☐ เตือนซ้ำเมื่อรอฉัน` | repeat wait-for-user reminders |
+| `ทดสอบฉาก` | scenario dropdown — **only appears in fixture mode** |
+| `คลาสสิก` / `NEURAL CORE` | switch to the classic / 3D view |
+| `✕` | close the detail panel |
+
+**Keyboard:** `+` zoom in · `-` zoom out · `0` fit · arrow keys pan (`Shift` for bigger steps) ·
+`Esc` closes the legend first, then the detail panel. Keys are ignored while you are in a text box
+or dropdown.
+
+**Touch:** one finger pans, a tap selects, a pinch zooms one step at a time.
+
+### The detail panel
+
+Everything in the panel comes from the **latest snapshot**, not from what the character happens to
+be acting out:
+
+- **Header:** `หัวหน้า` / `ผู้ช่วย` (lead / helper), the name, where it runs (surface and kind for a
+  lead, agent type and room for a helper), the model chip, and a state chip with a live clock.
+- **`กำลังทำ`** ("doing now"): every running tool with its own clock — up to six, then
+  `และอีก N รายการ` ("and N more"). A finished helper shows `งานล่าสุด` ("latest work") instead, with
+  ✓ / ✗ and the duration.
+- **`บนจอตอนนี้:`** ("on screen now"): what the character is acting out. When that is a replay it
+  carries the `ภาพย้อนหลัง` chip, so you can always tell the story apart from the facts above it.
+- **Four counters:** tool · error · `ถูกปฏิเสธ` (denied) · `โทเค็น` (tokens) for a lead; tool ·
+  error · `เวลา` (time since it was hired) · tokens for a helper.
+- **Text:** a lead shows your latest prompt, the last thing it said and its latest snag (error,
+  denial or block); a helper shows the task it was given, the last thing it said, its latest snag
+  and, once finished, the report it delivered.
+- **Facts:** `ผู้ว่าจ้าง` (hired by — click it to walk up the hiring chain one step at a time),
+  level, project and git branch, surface and version, model and effort, helpers (working / done /
+  failed / total), `ตัดสินสถานะจาก` (the evidence the server used to decide a helper is still
+  running — proven or inferred), outcome, `จบเทิร์นด้วย` (turn ended by), started, workflow id.
+- **`ดูละเอียดในหน้าคลาสสิก →`** — the full tool history, error categories and raw inputs are in the
+  classic view. The pixel view never calls `/api/agent`; it works from the stream alone.
+
+When the character you selected finishes and walks out, the panel closes on its own.
+
+> Motion: with `prefers-reduced-motion` set, particle bursts, idle bobbing and shaking are turned
+> off and alert bubbles stay lit instead of blinking. The setting is read once, when the page loads.
+
+> If `/activity-audio.js` fails to load, the page still runs and the audio control reads
+> `เสียง AI: ไม่รองรับ` ("AI audio: not supported"). If anything else fails to load you get an error
+> card with a link back to the classic view, and a watchdog speaks up if no first frame has arrived
+> after 12 seconds.
 
 ---
 
@@ -245,8 +477,9 @@ are kept apart instead of merged into one total.
 
 ## Demo mode
 
-Both views can render fake data so you can see the whole interface before you have anything running.
-**`?fixture` means something different on each page.** That is deliberate.
+All three views can render fake data so you can see the whole interface before you have anything
+running. **`?fixture` means something different on the classic page than on the other two.** That
+is deliberate.
 
 ### Classic
 
@@ -280,6 +513,19 @@ This one **animates for real**, ticking every 700 ms, and shows a toast saying
 You can also pin render quality with `?quality=low|medium|high` and combine the two:
 `/brain.html?fixture=storm&quality=high`.
 
+### PIXEL OFFICE
+
+```
+http://127.0.0.1:7676/pixel.html?fixture=storm
+```
+
+The same scenario names as NEURAL CORE, played by the same fixture generator (two fake sessions,
+one tick every 700 ms); an unknown name falls back to `auto`. It **animates for real**: the
+connection pill reads `ต่อแล้ว (จำลอง)` ("connected (mock)"), a `ข้อมูลจำลอง` ("mock data") tag sits
+next to the title, the same `โหมดข้อมูลจำลอง — ไม่ได้ต่อกับ session จริง` toast appears, and the
+`ทดสอบฉาก` dropdown switches scenarios live. There is no `?quality` here — Canvas 2D has nothing to
+tune.
+
 ---
 
 ## Limits and ceilings
@@ -301,9 +547,12 @@ All deliberate. Knowing them stops you from reading a ceiling as a bug.
 | text clamps | 8000 / 600 / 600→400 chars | detail text, chips, blob preview |
 | lifetime scan | 400 MB prescan · 24 MB usage seed · 13 h lookback | ceilings on the token accounting |
 | drawn nodes | 64 (classic) · 640 nodes and links (3D) | drawing ceilings |
-| feed rows | 60 (3D) | live feed length |
+| helpers drawn per room | 64 (pixel) | running helpers past the cap are not dropped silently: they are counted on a `+N ที่ไม่ได้วาด` ("+N not drawn") sign in the room's bottom-right corner and a `ไม่ได้วาด` ("not drawn") chip in the top bar, and walk in when a desk frees up |
+| station queue | 3 characters (pixel) | the next one does that station's work at its own desk, with the station's icon in a thought bubble |
+| zoom | ×1–×8, whole steps (pixel) | keeps every art pixel a crisp square |
+| feed rows | 60 (3D and pixel) | live feed / event log length |
 | SSE keep-alive | 20 s | `: ping` comment |
-| reconnect | 1.5 s fixed (classic) · 1.5 s ×1.5 up to 10 s (3D) | after the stream drops |
+| reconnect | 1.5 s fixed (classic) · 1.5 s ×1.5 up to 10 s (3D and pixel) | after the stream drops |
 
 There is **no hot reload**. If you edit `server.mjs`, restart it. (The page is read fresh from disk
 on every request, so a page-only edit needs just a refresh — and if the page ends up newer than the
@@ -330,7 +579,9 @@ same snapshot as `GET`. That is low-risk only because the server binds `127.0.0.
 ## Label glossary
 
 Thai → English for everything the interface can put on screen. Grouped by where you will meet it.
-`{n}`, `{tool}`, `{dur}` and friends are values filled in at runtime.
+`{n}`, `{tool}`, `{dur}` and friends are values filled in at runtime. In sections 1–8, "both" means
+the classic view and NEURAL CORE; the PIXEL OFFICE's labels are collected in sections 9–13, even
+where a word also appears earlier.
 
 ### 1. Statuses
 
@@ -452,6 +703,9 @@ Thai → English for everything the interface can put on screen. Grouped by wher
 | เสียง AI | AI audio | audio-mode control |
 | ปิด / เอฟเฟกต์ / พูด+เอฟเฟกต์ | Off / Effects / Speech + effects | audio-mode choices |
 | รีเซ็ตมุมมอง | Reset view | button |
+| สลับมุมมอง | Switch view | accessible name of the `NEURAL CORE` · `PIXEL OFFICE` links at the end of the header |
+| มุมมองสามมิติ — ภาพรวมของทั้งระบบในแวบเดียว | 3D view — the whole system at a glance | `NEURAL CORE` link tooltip |
+| ออฟฟิศพิกเซล — ตัวละครเดินไปทำงานตามเครื่องมือที่ใช้จริง | Pixel office — characters walk to work at whatever tool is really running | `PIXEL OFFICE` link tooltip |
 | กลับมุมมองเริ่มต้น และปลดหมุด node ที่ลากไว้ | Reset to the default view and unpin dragged nodes | that button's tooltip |
 | ปิด | Close | panel close button |
 | กดดูรายละเอียด | Click for details | feed row tooltip |
@@ -609,11 +863,300 @@ Thai → English for everything the interface can put on screen. Grouped by wher
 | โควตา: สด — GET /api/oauth/usage ทุก {n}s (อ่าน OAuth token จาก {path}) | Quota: live — GET /api/oauth/usage every {n}s (reads the OAuth token from {path}) | startup, with `--live-usage` |
 | โควตา: หน้าต่าง 5 ชม. สดจาก transcript · % อย่างเป็นทางการมาจาก cache (ใส่ --live-usage เพื่อดึงสด) | Quota: 5-hour window live from transcripts · official % comes from cache (add --live-usage to fetch live) | startup, default |
 
+### 9. PIXEL OFFICE — top bar, tools, rooms and event log
+
+| Thai | English | Where |
+| --- | --- | --- |
+| กำลังต่อ… | Connecting… | connection pill |
+| ต่อแล้ว / ต่อแล้ว (จำลอง) | Connected / Connected (mock) | connection pill |
+| สตรีมหลุด | Stream lost | connection pill |
+| สถานะการเชื่อมต่อสตรีม /api/stream | Connection status of /api/stream | pill tooltip |
+| เชื่อมต่อสตรีม /api/stream อยู่ | Connected to /api/stream | pill tooltip |
+| กำลังเล่นข้อมูลจำลอง — ไม่ได้ต่อกับ session จริง | Playing mock data — not connected to a real session | pill tooltip (fixture) |
+| สตรีมหลุด — กำลังต่อใหม่อัตโนมัติ (ภาพบนจอคือสถานะล่าสุดก่อนหลุด) | Stream lost — reconnecting automatically (the screen shows the last state before it dropped) | pill tooltip |
+| ข้อมูลจำลอง | Mock data | tag next to the title (fixture only) |
+| หน้านี้เปิดด้วย ?fixture= — ทุกอย่างบนจอเป็นข้อมูลปลอม ไม่ใช่ session จริง | This page was opened with ?fixture= — everything on screen is fake, not a real session | that tag's tooltip |
+| สรุป ▾ / สรุป · รอคุณ {n} ▾ | Summary ▾ / Summary · {n} waiting on you ▾ | narrow screens: shows / hides the chips and audio controls |
+| แสดง/ซ่อนชิปสรุปและตัวควบคุมเสียง | Show / hide the summary chips and audio controls | that button's tooltip |
+| ห้องเปิด | Rooms open | stat chip |
+| session ที่ยังเปิดอยู่ (ห้องที่ไฟติด) | Sessions still open (rooms with the lights on) | chip tooltip |
+| บนจอ {n} ห้อง · ตัวละคร {m} ตัว | {n} rooms on screen · {m} characters | chip tooltip |
+| ทำงาน | Busy | stat chip |
+| session ที่กำลังคิด / ใช้เครื่องมือ / คุมผู้ช่วย | Sessions thinking / using a tool / supervising helpers | chip tooltip |
+| รอคุณ | Waiting on you | stat chip |
+| session ที่รอคุณตอบคำถามหรือรออนุญาต | Sessions waiting for your answer or your permission | chip tooltip |
+| ผู้ช่วยทำงาน | Helpers working | stat chip |
+| sub-agent ที่กำลังทำงานอยู่ตอนนี้ | Sub-agents running right now | chip tooltip |
+| เคยจ้างทั้งหมด {n} คน | {n} hired in total | chip tooltip |
+| tool ค้าง | Tools running | stat chip |
+| เครื่องมือที่กำลังรันอยู่ตอนนี้ (ของหัวหน้า + ผู้ช่วย) | Tools running right now (leads + helpers) | chip tooltip |
+| โทเค็น | Tokens | stat chip |
+| โทเค็นสะสม input + cache + output ของทุก session บนจอ | Cumulative input + cache + output tokens of every session on screen | chip tooltip |
+| ไม่ได้วาด | Not drawn | stat chip — only while some helpers do not fit |
+| ผู้ช่วยที่กำลังทำงานแต่ไม่ได้วาดเพราะห้องเต็ม {n} คน (ยังนับรวมในชิป “ผู้ช่วยทำงาน”) | {n} helpers working but not drawn because the room is full (still counted in the “Helpers working” chip) | chip tooltip |
+| เสียง AI / เสียง AI: ไม่รองรับ | AI audio / AI audio: not supported | audio control |
+| ปิด / เอฟเฟกต์ / พูด+เอฟเฟกต์ | Off / Effects / Speech + effects | audio-mode choices |
+| เตือนซ้ำเมื่อรอฉัน | Repeat reminders while waiting for me | checkbox |
+| คลาสสิก | Classic | view link |
+| หน้าคลาสสิก (กราฟ 2 มิติ + แผงรายละเอียดเต็ม) | Classic view (2D graph + full detail panel) | that link's tooltip |
+| มุมมองสมอง AI สามมิติ | The 3D AI-brain view | `NEURAL CORE` link tooltip |
+| ซูมออก / ซูมเข้า | Zoom out / Zoom in | `−` / `+` buttons |
+| ระดับซูม (1–8) | Zoom level (1–8) | the `×N` readout |
+| จัดกรอบ | Fit | button |
+| จัดกรอบให้เห็นทุกห้อง | Fit so every room is visible | its tooltip |
+| ป้าย: อัตโนมัติ / ทั้งหมด / ปิด | Captions: Auto / All / Off | caption button |
+| ป้ายงานของหัวหน้าขึ้นเมื่อซูม ≥2 · ของผู้ช่วยขึ้นเมื่อเลือก/ชี้ หรือซูม ≥4 | Leads' captions appear from zoom ≥2 · a helper's when selected / hovered or at zoom ≥4 | tooltip (auto) |
+| แสดงป้ายงานเหนือตัวละครทุกตัว | Show a caption over every character | tooltip (all) |
+| ซ่อนป้ายงานทั้งหมด (ยังคลิกตัวละครดูรายละเอียดได้) | Hide every caption (you can still click a character for details) | tooltip (off) |
+| (กดเพื่อสลับ อัตโนมัติ → ทั้งหมด → ปิด) | (click to cycle Auto → All → Off) | tooltip suffix |
+| คำอธิบายสัญลักษณ์ในฉาก | Scene legend | `?` button |
+| ทดสอบฉาก | Test scenario | dropdown (fixture only) — the same choices as the 3D view (section 6; `กำลังคิด` = thinking) |
+| ห้อง | Rooms | room list header |
+| ยังไม่มีห้อง | No rooms yet | room list, empty |
+| พับรายชื่อห้อง / กางรายชื่อห้อง | Collapse / expand the room list | header tooltip |
+| ไปที่ห้อง {name} ({state}) | Go to room {name} ({state}) | row tooltip |
+| (อยู่นอกจอ) | (off-screen) | screen-reader suffix on a blinking row |
+| ทำงาน · คุมงาน · รอคุณ · คิด · ติดด่าน · ว่าง · ไม่ทราบ · ปิดแล้ว | Working · Supervising · Waiting on you · Thinking · Blocked · Idle · Unknown · Closed | room state, in the list and on the nameplate |
+| บันทึกเหตุการณ์ | Event log | bottom-left panel |
+| ยังไม่มีเหตุการณ์ — ตัวละครจะเล่าเรื่องที่นี่ | No events yet — the characters will tell their story here | event log, empty |
+| พับบันทึกเหตุการณ์ / กางบันทึกเหตุการณ์ | Collapse / expand the event log | header tooltip |
+| คลิกเพื่อเลือกตัวละครของเหตุการณ์นี้ | Click to select this event's character | row tooltip |
+| ออฟฟิศยังปิดไฟอยู่ | The office lights are still off | empty state |
+| ยังไม่มี session — เปิด Claude Code แล้วไฟในออฟฟิศจะติดเอง | No sessions yet — start Claude Code and the office lights will come on | empty state |
+
+### 10. PIXEL OFFICE — the scene: nameplates, captions and signs
+
+| Thai | English | Where |
+| --- | --- | --- |
+| · ผู้ช่วย {n} | · {n} helpers | nameplate at zoom ×1 (helpers working) |
+| ปิดแล้ว · {ago} | Closed · {ago} | sign in the middle of a closed room |
+| เพิ่งปิด / {n} นาทีก่อน / {h} ชม. {m} นาทีก่อน | Just closed / {n} min ago / {h} h {m} min ago | that sign, and the detail panel |
+| +{n} ที่ไม่ได้วาด | +{n} not drawn | sign in a room's bottom-right corner |
+| {verb} {target} | {verb} {target} | caption while a tool runs — the verbs are in the next table |
+| สั่งงานผู้ช่วย · ทำงานอยู่ {n} คน | Delegating to helpers · {n} working | lead caption |
+| รอคุณตอบ · {question} | Waiting for your answer · {question} | lead caption |
+| รออนุญาต · {tool} {target} | Waiting for permission · {tool} {target} | lead caption |
+| คิดอยู่ | Thinking | caption |
+| คิดอยู่ · ล่าสุด {tool} ✓ / ✗ | Thinking · last {tool} ✓ / ✗ | helper caption between tools |
+| ว่าง | Idle | lead caption |
+| ติดด่าน · {endedBy} | Blocked · {endedBy} | lead caption |
+| ไม่ทราบสถานะ | Unknown status | lead caption |
+| ปิดแล้ว | Closed | lead caption |
+| ใช้เครื่องมือ | Using a tool | caption fallback |
+| ✓ เมื่อกี้ · {tool} {target} | ✓ Just now · {tool} {target} | replay caption — a tool that already finished between two polls |
+| 📬 คำสั่งใหม่: "{prompt}" | 📬 New prompt: "{prompt}" | extra line while the lead reads the letter |
+| ส่งงานแล้ว | Report delivered | helper leaving after success |
+| ไม่สำเร็จ ({outcome}) | Did not succeed ({outcome}) | helper leaving after a failure |
+| ถูกหยุดกลางคัน | Stopped midway | helper that was stopped |
+| จบงาน (ไม่ทราบผล) | Finished (outcome unknown) | helper leaving |
+| ออกจากห้อง | Leaving the room | character walking out |
+| ออฟฟิศพิกเซล: ลากเพื่อเลื่อนฉาก ล้อเมาส์เพื่อซูม คลิกตัวละครเพื่อดูรายละเอียด | Pixel office: drag to pan, wheel to zoom, click a character for details | canvas `aria-label` |
+
+The verb in a caption, an event-log line or a `กำลังทำ` row comes from the tool:
+
+| Thai | English | Tool |
+| --- | --- | --- |
+| อ่าน | Read | `Read` |
+| ค้นหา | Search | `Grep`, `Glob` |
+| รันคำสั่ง | Run a command | `Bash`, `PowerShell` |
+| แก้ไฟล์ | Edit a file | `Edit`, `MultiEdit`, `NotebookEdit` |
+| เขียนไฟล์ | Write a file | `Write` |
+| ค้นเว็บ | Search the web | `WebFetch`, `WebSearch` |
+| จดงาน | Note down tasks | `TodoWrite` |
+| วางแผนงาน | Plan the work | `Workflow` |
+| สั่งงานผู้ช่วย | Delegate to helpers | `Agent`, `Task` |
+| ถามคุณ | Ask you | `AskUserQuestion` |
+| หยิบเครื่องมือ | Pick up a tool | `Skill`, `ToolSearch` |
+| ใช้ปลั๊กอิน | Use a plugin | `mcp__*` |
+| เฝ้าดู | Watch | `Monitor` |
+| ทำรายงาน | Make a report | `Artifact` |
+| ใช้เครื่องมือ | Use a tool | anything else |
+
+### 11. PIXEL OFFICE — detail panel
+
+| Thai | English | Where |
+| --- | --- | --- |
+| หัวหน้า / ผู้ช่วย | Lead / Helper | role badge |
+| หัวหน้าห้อง | Head of the room | lead subtitle |
+| แอปเดสก์ท็อป / งานเบื้องหลัง | Desktop app / Background task | surface in the subtitle (`CLI` and `VS Code` stay as they are) |
+| เบื้องหลัง | Background | session kind in the subtitle |
+| ห้อง {name} | Room {name} | helper subtitle |
+| ปิดแผงรายละเอียด (Esc) | Close the detail panel (Esc) | `✕` |
+| ไม่ทราบรุ่น | Unknown model | model chip |
+| สีเสื้อของตัวละครบอกโมเดล | The character's shirt colour shows the model | model chip tooltip |
+| กำลังใช้เครื่องมือ | Using a tool | state chip |
+| คุมงานผู้ช่วย (รอ sub-agent) | Supervising helpers (waiting on sub-agents) | state chip (lead) |
+| คุมงานผู้ช่วยย่อย | Supervising its own helpers | state chip (helper) |
+| รอคุณตอบคำถาม | Waiting for you to answer a question | state chip |
+| รออนุญาต (น่าจะมีกล่องขอสิทธิ์ค้างอยู่) | Waiting for permission (probably a permission prompt is open) | state chip |
+| รอคุณ | Waiting on you | state chip |
+| กำลังคิด | Thinking | state chip |
+| ติดด่าน — เทิร์นจบด้วย error/ถูกปฏิเสธ | Blocked — the turn ended on an error / a denial | state chip |
+| ว่าง รอคำสั่ง | Idle — waiting for a prompt | state chip |
+| ไม่ทราบสถานะ (ไม่มี transcript) | Unknown status (no transcript) | state chip |
+| ปิดแล้ว · {ago} | Closed · {ago} | state chip |
+| ส่งงานแล้ว | Report delivered | state chip (helper, success) |
+| จบแล้ว / จบแล้ว (ไม่ทราบผลแน่ชัด) | Finished / Finished (outcome unknown) | state chip (helper) |
+| ล้มเหลว ({outcome}) | Failed ({outcome}) | state chip (helper) |
+| · ไม่อยู่ในข้อมูลล่าสุด | · not in the latest data | state suffix (lead) |
+| · ออกจากออฟฟิศแล้ว | · has left the office | state suffix (helper) |
+| ตัวละครนี้ออกจากออฟฟิศไปแล้ว — ด้านล่างคือข้อมูลล่าสุดที่เห็น | This character has left the office — below is the last data seen | note |
+| ไม่พบข้อมูล | Not found | title |
+| ไม่พบข้อมูลของตัวละครนี้ในสแนปช็อตล่าสุด | No data for this character in the latest snapshot | note |
+| กำลังทำ | Doing now | section |
+| งานล่าสุด | Latest work | section (finished helper) |
+| ✓ เสร็จ: / ✗ พลาด: | ✓ Done: / ✗ Failed: | a helper's last finished tool |
+| และอีก {n} รายการ | and {n} more | after six running tools |
+| คิดอยู่ — ไม่มีเครื่องมือค้าง | Thinking — no tool running | row |
+| นับเวลาจากความเคลื่อนไหวล่าสุดใน transcript | Timed from the last activity in the transcript | row detail |
+| ว่าง รอคำสั่งจากคุณ | Idle — waiting for your prompt | row |
+| ติดด่าน — รอคุณช่วยปลด | Blocked — waiting for you to unblock it | row |
+| คุมงานผู้ช่วย | Supervising helpers | row |
+| ไม่มีเครื่องมือค้างอยู่ | No tool running | empty |
+| session ปิดไปแล้ว — ไม่มีงานค้าง | Session closed — nothing running | empty |
+| ยังไม่มีข้อมูลเครื่องมือ | No tool data yet | empty (helper) |
+| บนจอตอนนี้: | On screen now: | what the character is acting out |
+| ภาพย้อนหลัง | Replay | chip on that line |
+| ตัวละครกำลังเล่าย้อน tool ที่จบไปแล้วระหว่างรอบอัปเดต — ไม่ใช่สิ่งที่กำลังรันอยู่ | The character is replaying a tool that already finished between updates — not something running now | chip tooltip |
+| ถูกปฏิเสธ | Denied | counter (lead) |
+| เวลา | Time | counter (helper) |
+| จำนวนครั้งที่เรียกเครื่องมือทั้ง session (ไม่รวมผู้ช่วย) | Tool calls in the whole session (helpers not included) | counter tooltip |
+| ทำงานมาแล้ว (นับจากตอนถูกจ้าง) | Working for (counted from when it was hired) | counter tooltip |
+| เวลาตั้งแต่ถูกจ้างจนเขียน transcript ครั้งสุดท้าย | Time from being hired to its last transcript write | counter tooltip |
+| คำสั่งล่าสุดจากคุณ | Your latest prompt | field (lead) |
+| งานที่ได้รับ | Task given | field (helper) |
+| พูดล่าสุด | Last said | field |
+| สะดุดล่าสุด | Latest snag | field |
+| ถูกปฏิเสธ: / ถูกบล็อก: / guard: / error: | Denied: / Blocked: / guard: / error: | snag prefix |
+| รายงานที่ส่ง | Report delivered | field (finished helper) |
+| ผู้ว่าจ้าง | Hired by | fact row (clickable) |
+| หัวหน้า · {room} / ผู้ช่วย · {name} | Lead · {room} / Helper · {name} | hired-by value |
+| ผู้ช่วย {id} (ไม่อยู่ในข้อมูลล่าสุด) | Helper {id} (not in the latest data) | hired-by value |
+| คลิกเพื่อดูผู้ว่าจ้าง / ผู้ว่าจ้างไม่อยู่ในข้อมูลล่าสุดแล้ว | Click to see the hirer / The hirer is no longer in the latest data | hired-by tooltip |
+| ลำดับชั้น | Level | fact row |
+| หัวหน้าจ้างตรง (ชั้น 1) / ผู้ช่วยจ้างต่อ (ชั้น {d}) | Hired directly by the lead (level 1) / Hired by another helper (level {d}) | level value |
+| โปรเจกต์ | Project | fact row |
+| เปิดผ่าน | Opened via | fact row (surface · version) |
+| โมเดล | Model | fact row |
+| ผู้ช่วย / จ้างต่อ | Helpers / Sub-hires | fact row (lead / helper) |
+| ยังไม่ได้จ้าง | None hired yet | helpers value |
+| ทำงาน {n} · จบ {n} · พลาด {n} · รวม {n} · (ตัดทิ้ง {n}) | {n} working · {n} done · {n} failed · {n} total · ({n} cut off) | helpers value |
+| ตัดสินสถานะจาก | Status decided from | fact row — values below, followed by the raw code |
+| หลักฐานที่ server ใช้ตัดสินว่าผู้ช่วยตัวนี้ยังทำงาน/จบแล้ว | The evidence the server used to decide whether this helper is still running | its tooltip |
+| ผลลัพธ์ | Outcome | fact row |
+| สำเร็จ · ล้มเหลว · error · ถูกหยุดกลางทาง · ไม่ทราบผล (เงียบไปเฉย ๆ) | Succeeded · Failed · error · Stopped midway · Outcome unknown (it just went quiet) | outcome values |
+| จบเทิร์นด้วย | Turn ended by | fact row (lead) |
+| เริ่มเมื่อ | Started | fact row |
+| ดูละเอียดในหน้าคลาสสิก → | See full detail in the classic view → | link |
+| หน้าคลาสสิกมีรายการ tool ทั้งหมด หมวด error และข้อมูลดิบของทุก agent | The classic view has every tool call, the error categories and the raw data of every agent | link tooltip |
+
+`ตัดสินสถานะจาก` values — this is what tells you whether "still running" was proven or inferred:
+
+| Thai | English | Code |
+| --- | --- | --- |
+| หัวหน้าได้รับแจ้งว่างานเสร็จแล้ว | The lead was notified that the task finished | `task-notification` |
+| หัวหน้ายังรอผลจากผู้ช่วยตัวนี้อยู่ | The lead is still waiting for this helper's result | `parent-pending` |
+| หัวหน้ายังรออยู่ แต่ไม่มีความเคลื่อนไหวมานานแล้ว | The lead is still waiting, but nothing has moved for a long time | `parent-pending-stale` |
+| บันทึก workflow บอกว่าเริ่มแล้วและยังไม่จบ | The workflow journal says it started and has not finished | `journal-started` |
+| บันทึก workflow บอกว่าเริ่มแล้ว แต่เงียบมานาน | The workflow journal says it started, but it has been quiet for a long time | `journal-started-stale` |
+| บันทึก workflow ระบุว่าจบแล้ว ({x}) | The workflow journal says it finished ({x}) | any other `journal-*` |
+| มีเครื่องมือค้างอยู่ใน transcript ของมันเอง | A tool is still outstanding in its own transcript | `own-tool-in-flight` |
+| มีเครื่องมือค้าง แต่เงียบมานาน | A tool is outstanding, but it has been quiet for a long time | `own-tool-in-flight-stale` |
+| transcript ของมันเองจบเทิร์นแล้ว ({x}) | Its own transcript has ended its turn ({x}) | any other `own-*` |
+| ไม่มีสัญญาณชัด — อนุมานว่ายังทำงาน (ไฟล์เพิ่งขยับไม่นาน) | No clear signal — assumed still running (the file changed recently) | `assumed-running` |
+| เงียบนานเกินเกณฑ์ — ถือว่าจบแล้ว | Silent past the threshold — treated as finished | `idle-timeout` |
+| ข้อมูลจำลอง | Mock data | `fixture` |
+
+### 12. PIXEL OFFICE — legend (`?`)
+
+| Thai | English | Where |
+| --- | --- | --- |
+| อ่านฉากออฟฟิศ | Reading the office scene | legend title |
+| คำอธิบายสัญลักษณ์ในฉากออฟฟิศ | Legend of the office scene | legend `aria-label` |
+| ปิดคำอธิบาย | Close the legend | `✕` |
+| ตัวละคร | Characters | section |
+| หัวหน้า = ตัวหลักของ session (ผูกเนคไท) · ผู้ช่วย = sub-agent ที่ถูกจ้าง (แว่น/หมวก/หูฟังตามชนิดงาน) — agent ตัวเดิมหน้าตาเดิมเสมอ | Lead = the session's main agent (wears a tie) · Helper = a hired sub-agent (glasses / cap / headphones by agent type) — the same agent always looks the same | note |
+| สถานีงาน → เครื่องมือ | Work stations → tools | section |
+| ตู้จดหมาย · คำสั่งใหม่จากคุณ — หัวหน้าเดินมาเปิดอ่าน | Mailbox · a new prompt from you — the lead walks over and opens it | station |
+| ชั้นหนังสือ · อ่านไฟล์ | Bookshelf · reading files | station |
+| ตู้เอกสาร · ค้นหาในโค้ด | Filing cabinet · searching the code | station |
+| เทอร์มินัล · รันคำสั่ง | Terminal · running commands | station |
+| โต๊ะของตัวเอง · แก้/เขียนไฟล์ (และเครื่องมืออื่น ๆ) | Own desk · editing / writing files (and any other tool) | station |
+| ตู้เว็บ · ค้นเว็บ | Web kiosk · searching the web | station |
+| ไวต์บอร์ด · จด/วางแผนงาน — และยืนคิด | Whiteboard · noting / planning work — and standing there thinking | station |
+| แผงเครื่องมือ · หยิบเครื่องมือ/ใช้ปลั๊กอิน | Toolbox · picking a tool / using a plugin | station |
+| กล้องวงจรปิด · เฝ้าดู | CCTV · watching | station |
+| เครื่องพิมพ์ · ทำรายงาน | Printer · making a report | station |
+| ตู้โทรศัพท์ · ถามคุณ — ยกมือ = รออนุญาต | Phone booth · asking you — hand raised = waiting for permission | station |
+| เดินคุมงาน · สั่งงานผู้ช่วยแล้วเดินตรวจ | Walking the floor · delegating to helpers, then walking round to check on them | station |
+| มุมกาแฟ/โซฟา · ว่าง — จิบกาแฟ แล้วงีบบนโซฟาถ้าว่างนาน | Coffee corner / couch · idle — sips coffee, then naps on the couch if idle for long | station |
+| ประตู · ผู้ช่วยเดินเข้ามารับงาน · ส่งรายงานแล้วเดินออก | Door · helpers walk in to take a job · hand in their report and walk out | station |
+| สีเสื้อ → โมเดล | Shirt colour → model | section |
+| ไม่ทราบรุ่น | Unknown model | grey shirt |
+| สัญญาณในฉาก | Signs in the scene | section |
+| เมฆฝนเหนือโต๊ะ · ติดด่าน — เทิร์นจบด้วย error/ถูกปฏิเสธ รอคุณช่วย | Rain cloud over the desk · blocked — the turn ended on an error / a denial, waiting for your help | sign |
+| ป้ายกระพริบ · รอคุณตอบ หรือรออนุญาต | Blinking sign · waiting for your answer or your permission | sign |
+| ลูกโป่งความคิด · กำลังคิด ไม่มีเครื่องมือค้าง | Thought bubble · thinking, no tool running | sign |
+| นั่งพิมพ์ + ไอคอนสถานี · ผู้ช่วยทำงานของสถานีนั้นที่โต๊ะตัวเอง (tool เพิ่งเริ่ม สถานีไกล หรือคิวเต็ม) — tool จริงดูที่ป้าย | Typing at the desk + a station icon · the helper is doing that station's work at its own desk (the tool just started, the station is far away, or its queue is full) — the caption names the real tool | sign |
+| ปุ๊ฟหาย · ผู้ช่วยจบงานไกลผู้จ้าง/ห้องเต็ม: ยื่นรายงานจากที่ยืนแล้วออกไป (ฟีดบอกผลงาน) | Poof · a helper that finished far from its hirer, or in a full room, hands in its report from where it stands and leaves (the event log tells the result) | sign |
+| “✓ เมื่อกี้” · ภาพย้อน tool ที่จบไปแล้วระหว่างรอบอัปเดต — ไม่ใช่สิ่งที่กำลังทำอยู่ | “✓ just now” · a replay of a tool that finished between updates — not what is happening now | sign |
+| ไฟห้องดับ · session ปิดแล้ว (ค้างบนจอได้ถึง 30 นาที) | Room lights off · the session has closed (stays on screen for up to 30 minutes) | sign |
+| การใช้งาน | How to use it | section |
+| ลาก = เลื่อนฉาก · ล้อเมาส์ = ซูม · คลิกตัวละคร = ดูรายละเอียด · ดับเบิลคลิก = ตามตัว · Esc = ปิดแผง | Drag = pan · wheel = zoom · click a character = details · double-click = go to that character · Esc = close the panel | note |
+
+The legend also repeats the tool names (`Read`, `Grep · Glob`, …) next to each station, as in the
+[stations table](#stations--where-each-tool-is-worked).
+
+### 13. PIXEL OFFICE — event log, toasts and messages
+
+`{room}` is a room name. `{who}` is a helper written as `type·id` (for example `scout·a3f9`), or
+`ผู้ช่วย {n} คน ({types})` ("{n} helpers ({types})") when several are reported in one line.
+
+| Thai | English | When |
+| --- | --- | --- |
+| 💡 เปิดไฟออฟฟิศ: {n} ห้อง · ผู้ช่วยกำลังทำงาน {m} คน | 💡 Office lights on: {n} rooms · {m} helpers working | first line after the page loads |
+| 💡 เปิดไฟห้อง {room} | 💡 Lights on in {room} | a new session |
+| 🌙 {room}: ปิดห้องแล้ว | 🌙 {room}: room closed | a session ended |
+| 📬 {room}: ได้รับคำสั่งใหม่ — "{prompt}" | 📬 {room}: got a new prompt — "{prompt}" | a new prompt |
+| {icon} {room}: {verb} {target} | {icon} {room}: {verb} {target} | the lead started a new tool |
+| 🙋 {room}: รอคุณตอบ / ✋ {room}: รออนุญาต | 🙋 {room}: waiting for your answer / ✋ {room}: waiting for permission | the session started waiting |
+| ⛔ {room}: ติดด่าน — {why} | ⛔ {room}: blocked — {why} | the turn ended on a problem |
+| ไม่ทราบสาเหตุ | reason unknown | `{why}` fallback |
+| ☕ {room}: งานเสร็จ พักจิบกาแฟ | ☕ {room}: work done, coffee break | the session went idle |
+| 💥 {room}: error — {text} | 💥 {room}: error — {text} | the lead hit an error |
+| {tool} ล้มเหลว / {n} ครั้ง | {tool} failed / {n} times | `{text}` fallback |
+| 🛑 {room}: ถูกปฏิเสธ — {label} | 🛑 {room}: denied — {label} | a tool call was denied |
+| 🤝 {room}: รับผู้ช่วย {n} คน ({types}) | 🤝 {room}: hired {n} helpers ({types}) | helpers hired by the lead |
+| 🤝 {room}: {type·id} รับผู้ช่วย {n} คน ({types}) | 🤝 {room}: {type·id} hired {n} helpers ({types}) | a helper hiring helpers of its own |
+| 💥 {room}: ผู้ช่วย {n} คนเจอ error | 💥 {room}: {n} helpers hit errors | three or more at once |
+| 💥 {room}: {who} error — {text} | 💥 {room}: {who} error — {text} | a helper hit an error |
+| ✅ {room}: {who} ส่งงานให้หัวหน้าแล้ว / ส่งงานให้ {hirer} แล้ว | ✅ {room}: {who} handed its report to the lead / to {hirer} | helpers finished |
+| ✅ {room}: {who} ส่งงานแล้ว | ✅ {room}: {who} delivered | finished helpers with different hirers |
+| ❌ {room}: {who} ทำงานไม่สำเร็จ ({outcomes}) | ❌ {room}: {who} did not succeed ({outcomes}) | helpers failed |
+| ⏹ {room}: {who} ถูกหยุดกลางคัน | ⏹ {room}: {who} was stopped midway | helpers stopped |
+| ❔ {room}: {who} จบงาน (ไม่ทราบผล) | ❔ {room}: {who} finished (outcome unknown) | helpers finished without a clear outcome |
+| 🔌 ต่อสตรีมกลับมาแล้ว | 🔌 Stream reconnected | after a drop |
+| 🔌 สตรีมหลุด — กำลังต่อใหม่ (ภาพค้างที่สถานะล่าสุด) | 🔌 Stream lost — reconnecting (the picture is frozen at the last state) | stream dropped |
+| โหมดข้อมูลจำลอง — ไม่ได้ต่อกับ session จริง | Mock data mode — not connected to a real session | toast (fixture) |
+| สลับสถานการณ์: {scenario} | Switched scenario: {scenario} | toast |
+| ห้องใหม่ “{room}” อยู่นอกจอ — กด “จัดกรอบ” หรือเลือกจากรายชื่อห้อง | New room “{room}” is off-screen — press “Fit” or pick it from the room list | toast |
+| มีห้องใหม่ {n} ห้องอยู่นอกจอ — กด “จัดกรอบ” หรือลากเพื่อเลื่อนดู | {n} new rooms are off-screen — press “Fit” or drag to look around | toast |
+| ออฟฟิศใหญ่กว่าจอ ({n} ห้องเห็นไม่ครบ) — ลากเพื่อเลื่อนดู หรือเลือกห้องจากรายชื่อ | The office is bigger than the screen ({n} rooms not fully visible) — drag to look around, or pick a room from the list | toast, after the first fit |
+| กำลังเปิดไฟออฟฟิศ — โหลดสคริปต์และต่อสตรีม /api/stream … | Turning on the office lights — loading scripts and connecting to /api/stream … | boot card |
+| ออฟฟิศเปิดไม่ขึ้น | The office would not open | boot error title |
+| ยังไม่มีเฟรมแรกหลัง 12 วินาที — ลองรีเฟรช หรือเปิด DevTools › Console ดูว่าไฟล์ใน /pixel/ หรือ /brain/ ตัวไหนโหลดไม่ขึ้น | No first frame after 12 seconds — try refreshing, or open DevTools › Console to see which file under /pixel/ or /brain/ failed to load | boot watchdog |
+| หน้านี้ต้องเปิด JavaScript — หรือใช้หน้าคลาสสิกที่ /index.html | This page needs JavaScript — or use the classic view at /index.html | `<noscript>` |
+
+The pixel boot card also reuses three labels from section 7: `เปิด DevTools › Console เพื่อดูรายละเอียดเต็ม`,
+`โหลดสคริปต์ไม่สำเร็จ: {src}` and `← กลับไปหน้าคลาสสิก`.
+
 ---
 
-Two labels not in the tables above, because they only ever appear in the browser's DevTools console
-and never on screen: `public/brain/store.js` logs `[brain/store] เปิด EventSource ไม่สำเร็จ`
-("could not open EventSource") and two similar reconnect messages.
+A few labels are not in the tables above, because they only ever appear in the browser's DevTools
+console and never on screen: `public/brain/store.js` logs `[brain/store] เปิด EventSource ไม่สำเร็จ`
+("could not open EventSource") and two similar reconnect messages, and `public/pixel.html` logs
+`[pixel] โหลด /activity-audio.js ไม่สำเร็จ — ทำงานต่อแบบไม่มีเสียง` ("could not load
+/activity-audio.js — carrying on without sound").
 
 Found a label that is missing here, or a translation that reads badly? Please open an issue — see
 [Contributing](../README.md#contributing).

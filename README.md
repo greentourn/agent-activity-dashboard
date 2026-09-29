@@ -6,7 +6,7 @@
 for how long — down to every sub-agent it spawned, on every surface: the CLI, the VS Code
 extension, the desktop app, and background (`--bg`) sessions.
 
-No dependencies. No hooks. Read-only. Bound to `127.0.0.1` only. Both views also share optional
+No dependencies. No hooks. Read-only. Bound to `127.0.0.1` only. All three views also share optional
 cross-platform Thai activity audio: recognisable futuristic cues for every fresh event, brief plain-
 language speech for important changes, and matching visual pulses.
 
@@ -54,6 +54,22 @@ thinking, calling tools, cascading sub-agents.
 
 ![NEURAL CORE under a fan-out storm](docs/images/neural-core-storm.jpg)
 
+### PIXEL OFFICE — who is doing what
+
+A 2D pixel-art office (plain Canvas 2D, every sprite drawn in code — no image files, no WebGL). Each
+session is a room, its main agent is the lead, and every running sub-agent is a helper who walks to
+the station that matches the tool it is really running: the bookshelf for `Read`, the terminal for
+`Bash`, the phone booth when it is waiting on you. Here it is under the same fan-out storm demo,
+with the helpers that did not fit counted on a `+N ที่ไม่ได้วาด` ("+N not drawn") sign instead of
+silently dropped:
+
+![PIXEL OFFICE under a fan-out storm](docs/images/pixel-office-storm.png)
+
+Zoomed in: helpers at their desks, the lead walking the floor while its helpers work, and a caption
+that always names the real current activity and how long it has been running.
+
+![PIXEL OFFICE close-up](docs/images/pixel-office-closeup.png)
+
 ---
 
 ## Why this exists
@@ -78,7 +94,7 @@ one.
 | **Install step** | none — zero dependencies, no `npm install`, no build |
 | **Network** | none required. three.js is vendored in `public/vendor/`, so it works fully offline |
 | **Claude Code** | needed only to have *something to watch*. The dashboard itself never launches or talks to Claude Code |
-| **Browser** | any modern browser on Windows, macOS, or Linux. Activity effects use Web Audio; optional speech prefers an installed local `th-*` Web Speech voice; without one it uses the machine's own local voice (typically English) with an English phrase set, and falls back to effects only if no local voice exists at all. The 3D view additionally needs WebGL |
+| **Browser** | any modern browser on Windows, macOS, or Linux. Activity effects use Web Audio; optional speech prefers an installed local `th-*` Web Speech voice; without one it uses the machine's own local voice (typically English) with an English phrase set, and falls back to effects only if no local voice exists at all. Only the 3D view needs WebGL — the classic and pixel views do not |
 
 ---
 
@@ -98,18 +114,19 @@ Stop it with `Ctrl+C`.
 
 ---
 
-## The two views
+## The three views
 
-One server serves both. Nothing extra to run, and you can switch back and forth at any time.
+One server serves all three. Nothing extra to run, and you can switch between them at any time.
 
 | View | URL | What it is for |
 | --- | --- | --- |
 | **Classic** | <http://127.0.0.1:7676> | 2D SVG graph — the most detail. Read exact numbers, walk tool calls one by one, drill into errors |
 | **NEURAL CORE** | <http://127.0.0.1:7676/brain.html> | 3D brain — the overall shape of the system at a glance |
+| **PIXEL OFFICE** | <http://127.0.0.1:7676/pixel.html> | 2D pixel-art office — every session a room, every agent a character walking to the station of the tool it is really running. Who is doing what, told as a story |
 
-Both consume the **same** `/api/stream` SSE feed.
+All three consume the **same** `/api/stream` SSE feed.
 
-Both use the same browser audio engine and offer three modes: `ปิด` (off, the default), `เอฟเฟกต์`
+All three use the same browser audio engine and offer three modes: `ปิด` (off, the default), `เอฟเฟกต์`
 (effects only), and `พูด+เอฟเฟกต์` (Thai speech + effects). Every newly observed event gets an
 event-family cue with subtle variation, while speech is reserved for meaningful transitions and a
 short summary of rapid bursts. Thai phrases rotate without an immediate repeat and use everyday
@@ -131,17 +148,19 @@ preferred; if none is installed, the machine's default local voice speaks the sa
 instead, and if there is no local voice at all, effects continue without an error. Cloud voices such
 as Edge's "Online (Natural)" set are never used.
 
-> ⚠️ Two things to know: `--open` always opens **NEURAL CORE** (the 3D view), and the classic view
-> has **no link** to the 3D one — the server prints both URLs in its startup banner, so pick from
-> there. The 3D view does have a `← หน้าคลาสสิก` ("back to classic") link in its bottom-right
-> control bar, and it shows that same link on its own if your browser has no WebGL.
+> ⚠️ `--open` always opens **NEURAL CORE** (the 3D view); the server also prints all three URLs in
+> its startup banner. Every view links to the other two, so you can switch at any time: the classic
+> view has `NEURAL CORE` and `PIXEL OFFICE` links at the end of its header, the 3D view has
+> `← หน้าคลาสสิก` ("back to classic") and `PIXEL OFFICE` in its bottom-right control bar (and shows
+> the classic link on its own if your browser has no WebGL), and the pixel view has `คลาสสิก`
+> ("classic") and `NEURAL CORE` at the top right.
 
 ---
 
 ## Try it with no real session — demo mode
 
-Both views can render fake data, so you can see the whole UI before you have anything running.
-**The two pages spell `?fixture` differently, on purpose:**
+All three views can render fake data, so you can see the whole UI before you have anything running.
+**The classic page spells `?fixture` differently from the other two, on purpose:**
 
 ```bash
 # classic: N = how many fake sub-agents to draw (1–240, anything invalid falls back to 45)
@@ -149,17 +168,20 @@ http://127.0.0.1:7676/?fixture=45
 
 # NEURAL CORE: a named scenario, animated at 700 ms per tick
 http://127.0.0.1:7676/brain.html?fixture=cascade
+
+# PIXEL OFFICE: the same named scenarios as NEURAL CORE
+http://127.0.0.1:7676/pixel.html?fixture=storm
 ```
 
-Scenarios for the 3D view: `auto` (cycles through all of them) · `idle` · `thinking` · `cascade` ·
-`storm` · `errors`. You can also pin render quality with `?quality=low|medium|high`, and combine
-them: `/brain.html?fixture=storm&quality=high`.
+Scenarios for the 3D and pixel views: `auto` (cycles through all of them) · `idle` · `thinking` ·
+`cascade` · `storm` · `errors`. On the 3D view you can also pin render quality with
+`?quality=low|medium|high`, and combine them: `/brain.html?fixture=storm&quality=high`.
 
 The classic fixture renders **once** and never connects to the event stream, but it carries a whole
 synthetic session — prompt, thinking, tool calls, real-looking errors, a blocked command, token
-totals and a quota bar — so all five panel tabs have something in them. The 3D fixture animates for
-real and lets you switch scenarios live from the `ทดสอบฉาก` ("test scenario") dropdown, which only
-appears in fixture mode.
+totals and a quota bar — so all five panel tabs have something in them. The 3D and pixel fixtures
+animate for real and let you switch scenarios live from the `ทดสอบฉาก` ("test scenario") dropdown,
+which only appears in fixture mode.
 
 ---
 
@@ -256,7 +278,7 @@ secret". When it is on, the server says so out loud on its startup line.
 
 ```
 ~/.claude/**  ──poll every 700 ms──►  server.mjs  ──SSE /api/stream──►  browser
-   (read-only)                     (incremental tail,                (classic 2D / 3D)
+   (read-only)                     (incremental tail,             (classic · 3D · pixel)
                                     byte offsets remembered)
                                             │
                                    click a node ──► GET /api/agent?s=…&a=…
@@ -265,7 +287,8 @@ secret". When it is on, the server says so out loud on its startup line.
 - Polls the filesystem (not `fs.watch`), tails each transcript incrementally, builds a snapshot, and
   **only pushes when the payload actually changed**. SSE keep-alive ping every 20 s.
 - Heavy detail is deliberately **not** in the stream — clicking a node fetches it from `/api/agent`.
-- Reconnects on its own: fixed 1.5 s in the classic view; 1.5 s × 1.5 up to 10 s in the 3D view.
+- Reconnects on its own: fixed 1.5 s in the classic view; 1.5 s × 1.5 up to 10 s in the 3D and
+  pixel views.
 
 ### HTTP endpoints
 
@@ -292,7 +315,7 @@ These are all deliberate ceilings, not bugs. Full table in [docs/usage.md](docs/
 | 400 events buffered per session, 70 sent to the browser | the stream stays small; the rest is behind `/api/agent` |
 | 240 sub-agents tailed | a fan-out bigger than that is not fully read |
 | 24 *finished* sub-agents sent (running ones: all of them) | with parents always pulled back in, so a deep child is never re-parented onto the session by accident |
-| 64 nodes drawn (classic) · 640 nodes/links (3D) · 60 feed rows | drawing ceilings |
+| 64 nodes drawn (classic) · 640 nodes/links (3D) · 64 helpers per room (pixel) · 60 feed rows | drawing ceilings — the pixel view counts helpers past its cap on a `+N ที่ไม่ได้วาด` ("+N not drawn") sign |
 
 ---
 
@@ -301,8 +324,8 @@ These are all deliberate ceilings, not bugs. Full table in [docs/usage.md](docs/
 The UI is Thai. That is the honest state of this repo: it was built for a Thai-speaking workspace
 and published because it is useful, not because it was internationalised first.
 
-- **Code comments** are Thai too (~850 lines of them) — they explain *why* each measurement is done
-  the way it is, and they are the most valuable part of the source.
+- **Code comments** are Thai too (well over 2,000 lines of them) — they explain *why* each
+  measurement is done the way it is, and they are the most valuable part of the source.
 - **What you actually need to read on screen** is a small, fixed set of labels. Every one of them is
   translated in [docs/usage.md](docs/usage.md) → *Label glossary*.
 - **The data is language-neutral** — tool names, file paths, agent types, models, timers, token
@@ -340,12 +363,15 @@ A pull request that extracts the labels into an EN/TH toggle would be very welco
 
 Issues and pull requests are welcome. Things that would genuinely help:
 
-- **i18n** — lift the UI labels out of `public/index.html` and `public/brain/hud.js` into a table
-  with an EN/TH switch.
-- **A link from the classic view to `/brain.html`** — there isn't one today.
+- **i18n** — lift the UI labels out of `public/index.html`, `public/brain/hud.js` and
+  `public/pixel/hud.js` into a table with an EN/TH switch.
 - **Verified status evidence.** If you find a signal that distinguishes "window closed mid-turn"
   from "still thinking", that is the biggest open question in the whole tool. Bring the measurement,
   not the guess — that is the standard the rest of the code holds itself to.
+
+Before sending a pull request, run `node --test` from the repository root. It runs the shared
+audio engine's tests and `test/pixel-world.test.mjs`, which drives the pixel office's world logic
+(`public/pixel/world.js` has no DOM or canvas in it) straight in Node — no browser needed.
 
 ---
 

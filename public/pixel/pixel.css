@@ -1,0 +1,1714 @@
+/* pixel.css — สกินของ HUD หน้า PIXEL OFFICE (pixel.html)
+ *
+ * CSS ธรรมดา โหลดผ่าน <link> — ไม่มี build step ไม่มี CDN ไม่มีเว็บฟอนต์ ไม่มีไฟล์ภาพ
+ * (ไอคอนพิกเซลทุกชิ้นในไฟล์นี้วาดด้วย linear-gradient ทีละสี่เหลี่ยม)
+ *
+ * ภาษาภาพ: หน้าต่างเกมพิกเซลยุค 16-bit — มุมเหลี่ยมทุกจุด ขอบ 2px เงาแข็งเลื่อนออก (ไม่ blur)
+ * ขอบนูน/ยุบแบบ bevel ใช้ inset shadow แทน gradient พาเลตหลักคือ Sweetie 16 ชุดเดียวกับ sprites.js
+ * เพื่อให้ HUD กับฉากดูเป็นเกมเดียวกัน ธีมมืดอย่างเดียว (HUD ลอยทับฉากออฟฟิศยามค่ำเสมอ)
+ *
+ * กติกาเรื่องพื้นที่: ฉากคือพระเอก — HUD กินขอบจอให้น้อยที่สุด (แถบบนเตี้ย · ฟีดล่างซ้าย · แผงขวา)
+ * root ของ HUD เป็น pointer-events:none ทั้งผืน ลาก/ซูมฉากทะลุ HUD ได้ทุกที่ที่ไม่มีแผงวางอยู่
+ *
+ * ลำดับไฟล์ตรงกับโครง DOM ใน hud.js: ตัวแปร → ฐาน → ปุ่ม/ฟอร์ม → แถบบน → เสียง → dock ขวา
+ * (เครื่องมือ · legend · แผงรายละเอียด · รายชื่อห้อง) → ฟีด → จอว่าง → toast → responsive → reduced-motion
+ */
+
+/* ===================================================================
+   1) ตัวแปร — Sweetie 16 + สีเสริมตามสเปก
+   =================================================================== */
+:root {
+  color-scheme: dark;
+
+  --sw-black: #1a1c2c;
+  --sw-plum: #5d275d;
+  --sw-red: #b13e53;
+  --sw-orange: #ef7d57;
+  --sw-yellow: #ffcd75;
+  --sw-lime: #a7f070;
+  --sw-green: #38b764;
+  --sw-teal: #257179;
+  --sw-navy: #29366f;
+  --sw-blue: #3b5dc9;
+  --sw-sky: #41a6f6;
+  --sw-cyan: #73eff7;
+  --sw-white: #f4f4f4;
+  --sw-silver: #94b0c2;
+  --sw-slate: #566c86;
+  --sw-charcoal: #333c57;
+
+  /* สีเสริม: ม่วงของเสื้อ opus · ไม้ · พื้นทางเดินนอกห้อง · หมึกเงาแข็ง */
+  --px-opus: #7b4fbf;
+  --px-opus-hi: #b58cf0;
+  --px-wood: #8f563b;
+  --px-void: #12131f;
+  --px-ink: #0b0c14;
+
+  --px-panel-bg: rgba(26, 28, 44, 0.94);
+  --px-text: var(--sw-white);
+  /* silver บนพื้นแผงได้ contrast ~8:1 — slate (~3:1) ใช้เป็นเส้นตกแต่งเท่านั้น ห้ามใช้กับตัวอักษรเล็ก */
+  --px-dim: var(--sw-silver);
+
+  --px-mono: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+  --px-sans: "Segoe UI", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
+
+  /* ขอบนูนแบบพิกเซล: ไฮไลต์บนซ้าย เงาล่างขวา + เงาแข็งนอกกรอบ */
+  --px-bevel: inset 2px 2px 0 0 rgba(244, 244, 244, 0.08), inset -2px -2px 0 0 rgba(0, 0, 0, 0.35);
+  --px-drop: 3px 3px 0 0 var(--px-ink);
+}
+
+/* ===================================================================
+   2) ฐานของ HUD — ทุกอย่างอยู่ใต้ .px-hud ไม่แตะ DOM อื่นของหน้า
+   =================================================================== */
+.px-hud {
+  /* ค่าเริ่มก่อน hud.js วัดความสูงจริงด้วย ResizeObserver (กันเฟรมแรกกระโดด) */
+  --px-gap: 8px;
+  --px-top-h: 46px;
+  --px-feed-h: 34px;
+  --px-dock-w: 304px;
+
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--px-text);
+  font: 12px/1.45 var(--px-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.px-hud,
+.px-hud *,
+.px-hud *::before,
+.px-hud *::after {
+  box-sizing: border-box;
+}
+
+.px-hud [hidden] {
+  display: none !important;
+}
+
+.px-hud h1,
+.px-hud h2,
+.px-hud h3,
+.px-hud p,
+.px-hud ul,
+.px-hud dl,
+.px-hud dd {
+  margin: 0;
+  padding: 0;
+}
+
+.px-hud ul {
+  list-style: none;
+}
+
+/* แผงทุกแผงรับเมาส์เอง (คลิก/ล้อบนแผงต้องไม่ทะลุไปลากฉาก) — พื้นที่ว่างรอบ ๆ ยังทะลุได้ */
+.px-hud .px-panel,
+.px-hud button,
+.px-hud a,
+.px-hud select,
+.px-hud input,
+.px-hud label {
+  pointer-events: auto;
+}
+
+.px-panel {
+  background: var(--px-panel-bg);
+  border: 2px solid var(--sw-slate);
+  border-radius: 0;
+  box-shadow: var(--px-bevel), var(--px-drop);
+}
+
+.px-hud * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sw-slate) transparent;
+}
+
+.px-hud ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.px-hud ::-webkit-scrollbar-thumb {
+  background: var(--sw-slate);
+  border: 2px solid var(--sw-black);
+}
+
+.px-hud ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* focus ต้องเห็นชัดบนพื้นมืดทุกแผง — กรอบเหลืองแข็งแบบเคอร์เซอร์เกม */
+.px-hud :focus-visible {
+  outline: 2px solid var(--sw-yellow);
+  outline-offset: 2px;
+}
+
+.px-hud :focus:not(:focus-visible) {
+  outline: none;
+}
+
+.px-tone--info { --tone: var(--sw-sky); }
+.px-tone--good { --tone: var(--sw-green); }
+.px-tone--bad { --tone: var(--sw-red); }
+.px-tone--warn { --tone: var(--sw-yellow); }
+.px-tone--spawn { --tone: var(--sw-cyan); }
+
+/* สีเสื้อตามโมเดล — ต้องตรงกับเสื้อที่ sprites.js วาด (สเปก: "Shirt color by model tag") */
+.px-model--ha { --m: var(--sw-green); --m-hi: var(--sw-lime); --m-ink: var(--sw-black); }
+.px-model--so { --m: var(--sw-blue); --m-hi: var(--sw-sky); --m-ink: var(--sw-white); }
+.px-model--op { --m: var(--px-opus); --m-hi: var(--px-opus-hi); --m-ink: var(--sw-white); }
+.px-model--fa { --m: var(--sw-orange); --m-hi: var(--sw-yellow); --m-ink: var(--sw-black); }
+.px-model--un { --m: var(--sw-slate); --m-hi: var(--sw-silver); --m-ink: var(--sw-white); }
+
+/* ตัวอย่างเสื้อ: ตัวเสื้อ + แถบไฮไลต์ไหล่ + ขอบหมึก เหมือนผ้าในสไปรต์ */
+.px-shirt {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  background: var(--m, var(--sw-slate));
+  box-shadow: inset 0 3px 0 0 var(--m-hi, var(--sw-silver)), 0 0 0 2px var(--px-ink);
+}
+
+@keyframes px-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.35;
+  }
+}
+
+/* ===================================================================
+   3) ปุ่ม / ลิงก์ / select — ปุ่มพิกเซลนูน กดแล้วยุบลงตามเงา
+   =================================================================== */
+.px-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 3px 9px;
+  border: 2px solid var(--sw-slate);
+  border-radius: 0;
+  background: var(--sw-charcoal);
+  color: var(--sw-white);
+  font: 600 12px/1.1 var(--px-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: inset 2px 2px 0 0 rgba(244, 244, 244, 0.12), inset -2px -2px 0 0 rgba(0, 0, 0, 0.3),
+    2px 2px 0 0 var(--px-ink);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.px-btn:hover {
+  background: var(--sw-slate);
+  border-color: var(--sw-silver);
+}
+
+.px-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: inset 2px 2px 0 0 rgba(0, 0, 0, 0.35);
+}
+
+.px-btn.is-on {
+  background: var(--sw-teal);
+  border-color: var(--sw-cyan);
+}
+
+.px-btn:disabled,
+.px-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.px-btn:disabled:hover,
+.px-btn[aria-disabled="true"]:hover {
+  background: var(--sw-charcoal);
+  border-color: var(--sw-slate);
+}
+
+.px-btn:disabled:active,
+.px-btn[aria-disabled="true"]:active {
+  transform: none;
+  box-shadow: inset 2px 2px 0 0 rgba(244, 244, 244, 0.12), inset -2px -2px 0 0 rgba(0, 0, 0, 0.3),
+    2px 2px 0 0 var(--px-ink);
+}
+
+.px-btn--square {
+  width: 28px;
+  padding: 0;
+  font: 700 15px/1 var(--px-mono);
+}
+
+.px-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.px-btn--ghost:hover {
+  background: rgba(244, 244, 244, 0.1);
+  border-color: var(--sw-silver);
+}
+
+.px-btn--ghost:active {
+  box-shadow: none;
+}
+
+.px-btn--caption[data-mode="all"] {
+  background: var(--sw-navy);
+  border-color: var(--sw-sky);
+}
+
+.px-btn--caption[data-mode="none"] {
+  color: var(--px-dim);
+}
+
+.px-btn--inline {
+  justify-content: flex-start;
+  min-height: 22px;
+  max-width: 100%;
+  padding: 2px 6px;
+  font-size: 11.5px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: 2px 2px 0 0 var(--px-ink);
+}
+
+.px-btn--inline:disabled {
+  opacity: 0.75;
+  cursor: default;
+}
+
+.px-linkbtn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 2px solid var(--sw-teal);
+  background: var(--sw-black);
+  color: var(--sw-cyan);
+  font: 700 11px/1.1 var(--px-sans);
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 2px 2px 0 0 var(--px-ink);
+}
+
+.px-linkbtn:hover {
+  background: var(--sw-cyan);
+  border-color: var(--sw-cyan);
+  color: var(--sw-black);
+}
+
+.px-linkbtn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* select พิกเซล — ลูกศรวาดด้วยสามเหลี่ยม gradient สองชิ้น (ไม่ใช้ไฟล์ภาพ) */
+.px-select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 26px;
+  max-width: 100%;
+  padding: 2px 22px 2px 6px;
+  border: 2px solid var(--sw-slate);
+  border-radius: 0;
+  background-color: var(--sw-black);
+  background-image: linear-gradient(45deg, transparent 50%, var(--sw-silver) 50%),
+    linear-gradient(135deg, var(--sw-silver) 50%, transparent 50%);
+  background-position: calc(100% - 11px) 50%, calc(100% - 6px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  color: var(--sw-white);
+  font: 600 12px/1.2 var(--px-sans);
+  cursor: pointer;
+  color-scheme: dark;
+}
+
+.px-select:hover {
+  border-color: var(--sw-silver);
+}
+
+.px-select option {
+  background: var(--sw-black);
+  color: var(--sw-white);
+}
+
+/* หัวแผง (div ของ legend หรือ button พับ/กางของฟีด/รายชื่อห้อง) — แถบน้ำเงินแบบหน้าต่าง RPG */
+.px-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  margin: 0;
+  padding: 4px 8px;
+  border: 0;
+  border-bottom: 2px solid var(--px-ink);
+  border-radius: 0;
+  background: var(--sw-navy);
+  color: var(--sw-white);
+  font: 700 12px/1.2 var(--px-sans);
+  text-align: left;
+}
+
+button.px-panel-head {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+button.px-panel-head:hover {
+  background: var(--sw-blue);
+}
+
+.is-collapsed > .px-panel-head {
+  border-bottom: 0;
+}
+
+.px-panel-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+}
+
+.px-chev {
+  flex: 0 0 auto;
+  width: 12px;
+  text-align: center;
+  font: 700 11px/1 var(--px-mono);
+  color: var(--sw-yellow);
+}
+
+.px-count {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 2px solid var(--px-ink);
+  background: var(--sw-charcoal);
+  color: var(--sw-white);
+  font: 700 10px/1 var(--px-mono);
+}
+
+.px-count--new {
+  background: var(--sw-yellow);
+  color: var(--sw-black);
+}
+
+.px-sec-title {
+  margin: 0 0 5px;
+  color: var(--sw-yellow);
+  font: 700 11px/1.3 var(--px-sans);
+  letter-spacing: 0.02em;
+}
+
+/* ===================================================================
+   4) แถบบน — กลุ่มแผงเตี้ย ๆ หลายก้อน ช่องว่างระหว่างก้อนยังลากฉากได้
+   =================================================================== */
+.px-topbar {
+  position: absolute;
+  top: var(--px-gap);
+  left: var(--px-gap);
+  right: var(--px-gap);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--px-gap);
+  pointer-events: none;
+}
+
+.px-brand {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 5px 12px 5px 10px;
+}
+
+/* ปุ่ม "สรุป" (พับแถวเสียง + ชิปสรุป) มีเฉพาะจอแคบ — จอกว้างมีที่พอแสดงทั้งสองแถวเสมอ */
+.px-more {
+  display: none;
+}
+
+/* ตึกออฟฟิศ 8×8 พิกเซล (สเกล 2) — หลังคา · ตัวตึก · หน้าต่างไฟติด 3 บาน + ดับ 1 บาน · ประตูไม้ · พื้น */
+.px-mark {
+  flex: 0 0 auto;
+  display: block;
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(var(--sw-yellow) 0 0) 4px 4px / 2px 2px no-repeat,
+    linear-gradient(var(--sw-yellow) 0 0) 10px 4px / 2px 2px no-repeat,
+    linear-gradient(var(--sw-yellow) 0 0) 4px 8px / 2px 2px no-repeat,
+    linear-gradient(var(--sw-black) 0 0) 10px 8px / 2px 2px no-repeat,
+    linear-gradient(var(--px-wood) 0 0) 6px 12px / 4px 4px no-repeat,
+    linear-gradient(var(--sw-slate) 0 0) 0 14px / 16px 2px no-repeat,
+    linear-gradient(var(--sw-navy) 0 0) 4px 0 / 8px 2px no-repeat,
+    linear-gradient(var(--sw-blue) 0 0) 2px 2px / 12px 12px no-repeat;
+}
+
+.px-wordmark {
+  color: var(--sw-yellow);
+  font: 700 14px/1 var(--px-mono);
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+  text-shadow: 2px 2px 0 var(--sw-red);
+}
+
+.px-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--px-dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.px-conn-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  background: var(--sw-slate);
+  box-shadow: 0 0 0 2px var(--px-ink);
+}
+
+.px-conn--pending .px-conn-dot {
+  background: var(--sw-yellow);
+  animation: px-blink 0.8s linear infinite;
+}
+
+.px-conn--on .px-conn-dot {
+  background: var(--sw-green);
+}
+
+.px-conn--on .px-conn-text {
+  color: var(--sw-lime);
+}
+
+.px-conn--off .px-conn-dot {
+  background: var(--sw-red);
+  animation: px-blink 1s linear infinite;
+}
+
+.px-conn--off .px-conn-text {
+  color: var(--sw-orange);
+  font-weight: 700;
+}
+
+.px-demo-tag {
+  padding: 3px 6px;
+  border: 2px solid var(--sw-orange);
+  background: var(--sw-plum);
+  color: var(--sw-white);
+  font: 700 10px/1 var(--px-sans);
+  white-space: nowrap;
+}
+
+/* ชิปสรุป — จอแคบเลื่อนแนวนอนได้ภายในแผงเอง (หน้าไม่มีวันเลื่อนแนวนอน) */
+.px-stats {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.px-stats::-webkit-scrollbar {
+  display: none;
+}
+
+.px-stat {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 3px 10px;
+  border-right: 2px solid var(--sw-charcoal);
+  white-space: nowrap;
+}
+
+.px-stat:last-child {
+  border-right: 0;
+}
+
+.px-stat-label {
+  color: var(--px-dim);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.px-stat-value {
+  color: var(--px-text);
+  font: 700 14px/1.1 var(--px-mono);
+}
+
+.px-stat--hot .px-stat-value {
+  color: var(--sw-cyan);
+}
+
+.px-stat--warn .px-stat-value {
+  color: var(--sw-yellow);
+}
+
+/* "รอคุณ" > 0 คือสิ่งเดียวบนแถบบนที่ต้องการคนจริง ๆ — กระพริบให้เห็นจากหางตา */
+.px-stat[data-stat="waiting"].px-stat--warn .px-stat-value {
+  animation: px-blink 1.2s linear infinite;
+}
+
+.px-audio {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-left: auto;
+  padding: 4px 10px 4px 6px;
+}
+
+.px-links {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+/* ===================================================================
+   5) ตัวควบคุมเสียง — markup เดียวกับหน้าคลาสสิก ปรับเฉพาะหน้าตาให้เป็นพิกเซล
+      (กฎ .agent-audio-mode-* / .toggle ของหน้าคลาสสิกอยู่ใน <style> ของ index.html
+       ไม่ได้อยู่ใน activity-audio.css จึงต้องมีฉบับของหน้านี้เอง)
+   =================================================================== */
+.px-hud .agent-voice-toggle {
+  --agent-voice-accent: var(--sw-cyan);
+  --agent-voice-speaking: var(--sw-lime);
+  --agent-voice-text: var(--px-dim);
+  --agent-voice-bg: var(--sw-black);
+  min-height: 28px;
+  padding: 3px 6px 3px 8px;
+  border: 2px solid var(--sw-slate);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 0 var(--px-ink);
+  transition: none;
+}
+
+.px-hud .agent-voice-toggle:hover {
+  border-color: var(--sw-silver);
+}
+
+.px-hud .agent-voice-toggle.is-enabled {
+  border-color: var(--sw-cyan);
+  box-shadow: 2px 2px 0 0 var(--px-ink);
+}
+
+.px-hud .agent-voice-toggle.is-speaking {
+  border-color: var(--agent-voice-speaking);
+  box-shadow: 2px 2px 0 0 var(--px-ink), 0 0 0 2px rgba(167, 240, 112, 0.25);
+}
+
+.px-hud .agent-voice-meter > i {
+  border-radius: 0;
+}
+
+.px-hud .agent-voice-toggle.has-live-level .agent-voice-meter > i {
+  animation: none;
+  height: var(--voice-meter-height, 7px);
+  opacity: 1;
+  transition: height 70ms linear;
+}
+
+.px-hud .agent-audio-mode-control {
+  cursor: default;
+}
+
+.px-hud .agent-audio-mode-control:focus-within {
+  color: var(--agent-voice-accent);
+  border-color: var(--sw-yellow);
+  outline: 2px solid var(--sw-yellow);
+  outline-offset: 2px;
+}
+
+.px-hud .agent-audio-mode-control.is-unsupported {
+  opacity: 0.58;
+}
+
+.px-hud .agent-voice-label {
+  cursor: pointer;
+}
+
+.px-hud .agent-audio-mode-select {
+  max-width: 126px;
+  margin: -3px 0;
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.25;
+  cursor: pointer;
+  color-scheme: dark;
+}
+
+.px-hud .agent-audio-mode-select option {
+  background: var(--sw-black);
+  color: var(--sw-white);
+}
+
+.px-hud .agent-audio-mode-select:disabled {
+  cursor: not-allowed;
+}
+
+.px-hud .toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--px-dim);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.px-hud .toggle:hover {
+  color: var(--sw-white);
+}
+
+/* checkbox พิกเซล — กล่องขอบ 2px ติ๊กแล้วเป็นก้อนเขียวมีขอบใน */
+.px-hud .toggle input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 2px solid var(--sw-silver);
+  border-radius: 0;
+  background: var(--sw-black);
+  cursor: pointer;
+}
+
+.px-hud .toggle input[type="checkbox"]:checked {
+  background: var(--sw-green);
+  box-shadow: inset 0 0 0 2px var(--sw-black);
+}
+
+.px-hud .toggle input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.px-hud .agent-wait-reminder-toggle input:disabled + span {
+  opacity: 0.58;
+}
+
+/* ===================================================================
+   6) dock ขวา — เครื่องมือมุมมอง · แผงรายละเอียด · รายชื่อห้อง (เรียงลงเป็นคอลัมน์)
+   =================================================================== */
+.px-dock {
+  position: absolute;
+  top: calc(var(--px-top-h) + var(--px-gap) * 2);
+  right: var(--px-gap);
+  bottom: var(--px-gap);
+  width: var(--px-dock-w);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--px-gap);
+  pointer-events: none;
+}
+
+.px-tools {
+  position: relative;
+  z-index: 3;
+  flex: 0 0 auto;
+  padding: 6px;
+}
+
+.px-tools-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.px-zoom-val {
+  min-width: 30px;
+  text-align: center;
+  color: var(--sw-cyan);
+  font: 700 12px/1 var(--px-mono);
+}
+
+.px-btn--legend {
+  margin-left: auto;
+  color: var(--sw-yellow);
+}
+
+.px-scenario {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 2px dashed var(--sw-charcoal);
+  color: var(--sw-orange);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.px-scenario .px-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ---- legend (ปุ่ม ?) ---- */
+.px-legend {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  width: min(380px, calc(100vw - var(--px-gap) * 2));
+  max-height: calc(100vh - var(--px-top-h) - 96px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-color: var(--sw-silver);
+}
+
+.px-legend > .px-panel-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.px-legend-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 10px 12px;
+}
+
+.px-legend-note {
+  color: var(--px-dim);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.px-legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.px-legend-row {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: start;
+  gap: 6px;
+}
+
+.px-legend-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--sw-charcoal);
+  background: var(--sw-black);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.px-legend-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.px-legend-desc {
+  color: var(--px-dim);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.px-legend-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.px-legend-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+/* ---- แผงรายละเอียด ---- */
+.px-detail {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-color: var(--sw-silver);
+}
+
+.px-detail-head {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 8px 42px 9px 10px;
+  border-bottom: 2px solid var(--px-ink);
+  background: var(--sw-navy);
+}
+
+.px-detail-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.px-role {
+  display: inline-block;
+  padding: 3px 6px;
+  border: 2px solid var(--px-ink);
+  font: 700 10px/1 var(--px-sans);
+  letter-spacing: 0.04em;
+}
+
+.px-role--lead {
+  background: var(--sw-yellow);
+  color: var(--sw-black);
+}
+
+.px-role--helper {
+  background: var(--sw-cyan);
+  color: var(--sw-black);
+}
+
+.px-detail-name {
+  margin: 6px 0 2px;
+  font: 700 14px/1.3 var(--px-sans);
+  overflow-wrap: anywhere;
+}
+
+.px-detail-sub {
+  color: var(--sw-silver);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.px-detail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.px-model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 7px 2px 4px;
+  border: 2px solid var(--px-ink);
+  background: var(--m);
+  color: var(--m-ink);
+  font: 700 11px/1.3 var(--px-mono);
+}
+
+.px-model-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.px-state-chip {
+  --st-bg: var(--sw-charcoal);
+  --st-ink: var(--sw-white);
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 2px solid var(--px-ink);
+  background: var(--st-bg);
+  color: var(--st-ink);
+  font: 600 11px/1.3 var(--px-sans);
+}
+
+.px-state-since {
+  font: 700 10px/1.3 var(--px-mono);
+  opacity: 0.9;
+}
+
+.px-state-chip[data-state="tool"] { --st-bg: var(--sw-blue); }
+.px-state-chip[data-state="delegating"] { --st-bg: var(--px-opus); }
+.px-state-chip[data-state="waiting"] { --st-bg: var(--sw-yellow); --st-ink: var(--sw-black); }
+.px-state-chip[data-state="thinking"] { --st-bg: var(--sw-teal); }
+.px-state-chip[data-state="blocked"] { --st-bg: var(--sw-red); }
+.px-state-chip[data-state="failed"] { --st-bg: var(--sw-red); }
+.px-state-chip[data-state="done"] { --st-bg: var(--sw-green); --st-ink: var(--sw-black); }
+.px-state-chip[data-state="idle"] { --st-bg: var(--sw-charcoal); }
+.px-state-chip[data-state="unknown"] { --st-bg: var(--sw-slate); }
+.px-state-chip[data-state="closed"] { --st-bg: #232638; --st-ink: var(--sw-silver); }
+
+.px-state-chip[data-state="waiting"] .px-state-icon {
+  animation: px-blink 1s linear infinite;
+}
+
+.px-detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 9px 10px 12px;
+}
+
+.px-note {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 2px solid var(--sw-slate);
+  background: var(--sw-black);
+  color: var(--px-dim);
+  font-size: 11.5px;
+}
+
+.px-note--gone {
+  border-color: var(--sw-orange);
+  color: var(--sw-white);
+}
+
+.px-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.px-now-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.px-now-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 6px;
+  padding: 5px 7px;
+  border: 2px solid var(--sw-charcoal);
+  border-left: 4px solid var(--sw-sky);
+  background: var(--sw-black);
+}
+
+.px-now-row--state {
+  border-left-color: var(--sw-teal);
+}
+
+.px-now-row--done {
+  border-style: dashed;
+  border-left-style: solid;
+  border-left-color: var(--sw-green);
+}
+
+.px-now-row--more {
+  border-left-color: var(--sw-slate);
+  color: var(--px-dim);
+}
+
+.px-now-row--error {
+  border-left-color: var(--sw-red);
+}
+
+.px-now-row--error .px-now-head {
+  color: var(--sw-orange);
+}
+
+.px-now-icon {
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.px-now-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* break-word (ไม่ใช่ anywhere): ตัดที่ <wbr> ที่ hud.js แทรกไว้ตรงรอยต่อของชื่อ tool ก่อน ผ่ากลางคำเฉพาะที่จำเป็นจริง */
+.px-now-head {
+  font-weight: 700;
+  overflow-wrap: break-word;
+}
+
+.px-now-label {
+  color: var(--px-dim);
+  font: 11px/1.4 var(--px-mono);
+  overflow-wrap: break-word;
+}
+
+.px-now-time {
+  color: var(--sw-cyan);
+  font: 700 11px/1.35 var(--px-mono);
+  white-space: nowrap;
+}
+
+.px-now-row--done .px-now-time {
+  color: var(--px-dim);
+}
+
+.px-now-empty {
+  padding: 5px 7px;
+  border: 2px dashed var(--sw-charcoal);
+  color: var(--px-dim);
+  font-size: 11.5px;
+}
+
+.px-scene {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 6px;
+  color: var(--px-dim);
+  font-size: 11px;
+}
+
+.px-scene-text {
+  min-width: 0;
+  color: var(--sw-white);
+  overflow-wrap: anywhere;
+}
+
+.px-replay-chip {
+  padding: 1px 5px;
+  border: 2px solid var(--px-ink);
+  background: var(--sw-teal);
+  color: var(--sw-white);
+  font: 700 10px/1.3 var(--px-sans);
+}
+
+.px-statgrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.px-statcell {
+  min-width: 0;
+  padding: 4px 5px;
+  border: 2px solid var(--sw-charcoal);
+  background: var(--sw-black);
+}
+
+.px-statcell dt {
+  color: var(--px-dim);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.px-statcell dd {
+  font: 700 13px/1.3 var(--px-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.px-statcell--bad {
+  border-color: var(--sw-red);
+}
+
+.px-statcell--bad dd {
+  color: var(--sw-orange);
+}
+
+.px-statcell--warn dd {
+  color: var(--sw-yellow);
+}
+
+.px-field-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.px-field-label {
+  flex: 1 1 auto;
+}
+
+.px-field-meta {
+  flex: 0 0 auto;
+  color: var(--px-dim);
+  font: 400 10px/1.3 var(--px-mono);
+}
+
+.px-field-text {
+  padding: 5px 8px;
+  border-left: 4px solid var(--sw-slate);
+  background: var(--sw-black);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.px-field--trouble .px-field-text {
+  border-left-color: var(--sw-red);
+}
+
+.px-kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 10px;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.px-kv-key {
+  color: var(--px-dim);
+  white-space: nowrap;
+}
+
+.px-kv-val {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.px-classic-link {
+  align-self: flex-start;
+  color: var(--sw-sky);
+  font-weight: 700;
+  text-decoration: none;
+  border-bottom: 2px solid currentColor;
+}
+
+.px-classic-link:hover {
+  color: var(--sw-cyan);
+}
+
+/* ---- รายชื่อห้อง ---- */
+.px-rooms {
+  flex: 0 1 auto;
+  min-height: 34px;
+  max-height: 38vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.px-hud--detail-open .px-rooms {
+  max-height: 24vh;
+}
+
+.px-rooms-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.px-rooms-empty {
+  padding: 6px 8px;
+  color: var(--px-dim);
+  font-size: 11.5px;
+}
+
+.px-room {
+  --st-color: var(--sw-slate);
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-bottom: 2px solid var(--sw-charcoal);
+  border-radius: 0;
+  background: transparent;
+  color: var(--px-text);
+  font: 12px/1.3 var(--px-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.px-room:last-child {
+  border-bottom: 0;
+}
+
+.px-room:hover {
+  background: var(--sw-charcoal);
+}
+
+.px-room.is-current {
+  background: var(--sw-navy);
+  box-shadow: inset 4px 0 0 0 var(--sw-yellow);
+}
+
+.px-room.is-closed {
+  color: var(--px-dim);
+}
+
+.px-room-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  background: var(--st-color);
+  box-shadow: inset -2px -2px 0 0 rgba(0, 0, 0, 0.3), 0 0 0 2px var(--px-ink);
+}
+
+.px-room-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.px-room-state {
+  color: var(--px-dim);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.px-room[data-state="tool"] { --st-color: var(--sw-sky); }
+.px-room[data-state="delegating"] { --st-color: var(--px-opus-hi); }
+.px-room[data-state="waiting"] { --st-color: var(--sw-yellow); }
+.px-room[data-state="thinking"] { --st-color: var(--sw-cyan); }
+.px-room[data-state="blocked"] { --st-color: var(--sw-red); }
+.px-room[data-state="idle"] { --st-color: var(--sw-silver); }
+.px-room[data-state="closed"] { --st-color: #232638; }
+
+.px-room[data-state="waiting"] .px-room-state {
+  color: var(--sw-yellow);
+  font-weight: 700;
+}
+
+.px-room[data-state="blocked"] .px-room-state {
+  color: var(--sw-orange);
+  font-weight: 700;
+}
+
+.px-room[data-state="waiting"] .px-room-dot {
+  animation: px-blink 1s linear infinite;
+}
+
+/*
+ * ห้องที่รอคุณ/ติดด่าน "แต่อยู่นอกจอ" (ฉากวาดป้ายขอบจอให้ด้วย): แถวกระพริบพื้นเป็นจังหวะขั้นบันได
+ * แบบพิกเซล + แถบซ้ายสีสถานะ — กล้องไม่ขยับเอง แถวนี้คือคำเชิญให้กดไปดู
+ * (reduced motion: แอนิเมชันถูกปิดทั้ง HUD แต่พื้นสีจาง + แถบซ้ายยังอยู่ ความหมายไม่หาย)
+ */
+.px-room.is-attention {
+  background: color-mix(in srgb, var(--st-color) 18%, transparent);
+  box-shadow: inset 4px 0 0 0 var(--st-color);
+  animation: px-attn 1.1s steps(1, end) infinite;
+}
+
+.px-room.is-attention .px-room-state::after {
+  content: " ↘";
+}
+
+@keyframes px-attn {
+  0%,
+  49% {
+    background: color-mix(in srgb, var(--st-color) 34%, transparent);
+  }
+  50%,
+  100% {
+    background: color-mix(in srgb, var(--st-color) 12%, transparent);
+  }
+}
+
+/* รายชื่อห้องพับอยู่ (จอแคบ) ก็ยังต้องรู้ว่ามีห้องรอคุณนอกจอ — ตัวนับบนหัวรายชื่อกลายเป็นสีเหลืองกระพริบ */
+.px-rooms.has-attention .px-rooms-head .px-count {
+  background: var(--sw-yellow);
+  color: var(--sw-black);
+  animation: px-blink 1s linear infinite;
+}
+
+/* ===================================================================
+   7) ฟีดเหตุการณ์ — มุมล่างซ้าย แถวใหม่อยู่บนสุด
+   =================================================================== */
+.px-feed {
+  position: absolute;
+  left: var(--px-gap);
+  bottom: var(--px-gap);
+  width: min(400px, calc(100% - var(--px-dock-w) - var(--px-gap) * 3));
+  max-height: min(270px, 42vh);
+  display: flex;
+  flex-direction: column;
+}
+
+/* พับแล้วเหลือแค่แท็บเล็ก ๆ — คืนพื้นที่ฉากให้มากที่สุด */
+.px-feed.is-collapsed {
+  width: auto;
+}
+
+.px-feed-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 0;
+}
+
+.px-feed-empty {
+  padding: 8px 10px;
+  color: var(--px-dim);
+  font-size: 11.5px;
+}
+
+.px-feed-row {
+  --tone: var(--sw-sky);
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  grid-template-columns: auto 18px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 3px 8px 3px 6px;
+  border: 0;
+  border-left: 4px solid var(--tone);
+  border-radius: 0;
+  background: transparent;
+  color: var(--px-text);
+  font: 12px/1.4 var(--px-sans);
+  text-align: left;
+}
+
+button.px-feed-row {
+  cursor: pointer;
+}
+
+button.px-feed-row:hover {
+  background: var(--sw-charcoal);
+}
+
+.px-feed-row.px-tone--bad {
+  background: rgba(177, 62, 83, 0.14);
+}
+
+.px-feed-row.px-tone--warn {
+  background: rgba(255, 205, 117, 0.07);
+}
+
+button.px-feed-row.px-tone--bad:hover,
+button.px-feed-row.px-tone--warn:hover {
+  background: var(--sw-charcoal);
+}
+
+.px-feed-item + .px-feed-item {
+  border-top: 1px solid rgba(51, 60, 87, 0.7);
+}
+
+.px-feed-time {
+  color: var(--px-dim);
+  font: 10px/1.4 var(--px-mono);
+}
+
+.px-feed-icon {
+  text-align: center;
+  font-size: 12px;
+}
+
+.px-feed-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@keyframes px-flash {
+  0% {
+    background-color: rgba(255, 205, 117, 0.22);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* แถวใหม่สุดสว่างวาบสั้น ๆ แบบเฟรมกระตุก (steps) ให้รู้ว่าเพิ่งเข้ามา */
+.px-feed-item:first-child .px-feed-row {
+  animation: px-flash 0.6s steps(3, end) 1;
+}
+
+/* ===================================================================
+   8) จอว่าง — ยังไม่มี session
+   =================================================================== */
+.px-hud .px-empty {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, calc(100% - 32px));
+  padding: 18px 20px 20px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* หน้าต่างออฟฟิศยามค่ำ: กรอบเงิน · กระจกน้ำเงินเข้ม · พระจันทร์ + ดาว (วาดด้วย gradient ทีละก้อน) */
+.px-empty-art {
+  display: block;
+  width: 56px;
+  height: 48px;
+  margin: 0 auto 12px;
+  border: 4px solid var(--sw-silver);
+  background: linear-gradient(var(--sw-silver) 0 0) 22px 0 / 4px 40px no-repeat,
+    linear-gradient(var(--sw-silver) 0 0) 0 18px / 48px 4px no-repeat,
+    linear-gradient(var(--sw-yellow) 0 0) 32px 6px / 6px 6px no-repeat,
+    linear-gradient(var(--sw-navy) 0 0) 34px 6px / 4px 4px no-repeat,
+    linear-gradient(var(--sw-white) 0 0) 8px 6px / 2px 2px no-repeat,
+    linear-gradient(var(--sw-white) 0 0) 14px 28px / 2px 2px no-repeat,
+    linear-gradient(var(--sw-white) 0 0) 38px 30px / 2px 2px no-repeat,
+    linear-gradient(var(--sw-navy) 0 0) 0 0 / 48px 40px no-repeat;
+  box-shadow: 3px 3px 0 0 var(--px-ink);
+}
+
+.px-empty-title {
+  margin-bottom: 6px;
+  color: var(--sw-yellow);
+  font: 700 13px/1.3 var(--px-sans);
+  letter-spacing: 0.04em;
+}
+
+.px-empty-text {
+  color: var(--sw-white);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* ===================================================================
+   9) toast — ใต้แถบบน กลางพื้นที่ฉาก (ไม่ทับ dock ขวา)
+   =================================================================== */
+.px-toasts {
+  position: absolute;
+  top: calc(var(--px-top-h) + var(--px-gap) * 2);
+  left: var(--px-gap);
+  right: calc(var(--px-dock-w) + var(--px-gap) * 2);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.px-toast {
+  --tone: var(--sw-sky);
+  max-width: min(440px, 100%);
+  padding: 6px 12px 6px 10px;
+  border: 2px solid var(--tone);
+  border-left-width: 6px;
+  background: var(--sw-black);
+  color: var(--sw-white);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  box-shadow: var(--px-drop);
+  pointer-events: auto;
+  animation: px-toast-in 0.24s steps(3, end) both;
+}
+
+.px-toast--leaving {
+  animation: px-toast-out 0.24s steps(3, end) both;
+}
+
+@keyframes px-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes px-toast-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* ===================================================================
+   10) responsive — จอกลางห่อแถบบนเอง (flex-wrap) · จอแคบ ≤760px จัดใหม่ทั้งผัง
+       breakpoint ต้องตรงกับ NARROW_QUERY ใน hud.js
+   =================================================================== */
+@media (max-width: 760px) {
+  .px-hud {
+    --px-gap: 6px;
+  }
+
+  /* แถว 1: ตรา + ลิงก์ · แถว 2: เสียง · แถว 3: ชิปสรุป (เลื่อนแนวนอนในแผงเอง) */
+  .px-brand {
+    gap: 8px;
+    padding: 4px 8px;
+    min-height: 34px;
+  }
+
+  .px-wordmark {
+    font-size: 12px;
+    letter-spacing: 0.1em;
+  }
+
+  .px-links {
+    margin-left: auto;
+  }
+
+  .px-audio {
+    order: 3;
+    flex: 1 1 100%;
+    margin-left: 0;
+    padding: 4px 8px 4px 6px;
+  }
+
+  .px-stats {
+    order: 4;
+    flex: 1 1 100%;
+  }
+
+  /* แถวเสียง + ชิปสรุปพับอยู่หลังปุ่ม "สรุป" (เดิมกินจอมือถือ ~300 จาก 844 px ก่อนจะเห็นห้องแรก) */
+  .px-more {
+    display: inline-flex;
+    min-height: 24px;
+    padding: 2px 8px;
+    font-size: 11px;
+  }
+
+  .px-more--warn {
+    border-color: var(--sw-orange);
+    color: var(--sw-yellow);
+  }
+
+  .px-hud:not(.px-hud--more) .px-audio,
+  .px-hud:not(.px-hud--more) .px-stats {
+    display: none;
+  }
+
+  /* ป้าย "เสียง AI" ซ่อนเฉพาะด้วยตา — select ยังมี aria-label ของมันเองครบ */
+  .px-hud .agent-voice-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .px-dock {
+    left: auto;
+    bottom: auto;
+    width: auto;
+    max-width: calc(100% - var(--px-gap) * 2);
+    align-items: flex-end;
+  }
+
+  .px-rooms {
+    width: min(240px, calc(100vw - var(--px-gap) * 2));
+    max-height: 34vh;
+  }
+
+  /* จอแคบ: แผงรายละเอียดกลายเป็น bottom sheet เหนือฟีด และซ่อนรายชื่อห้องระหว่างเปิด */
+  .px-hud--detail-open .px-rooms {
+    display: none;
+  }
+
+  .px-detail {
+    position: fixed;
+    left: var(--px-gap);
+    right: var(--px-gap);
+    bottom: calc(var(--px-feed-h) + var(--px-gap) * 2);
+    z-index: 6;
+    max-height: min(56vh, calc(100vh - var(--px-top-h) - var(--px-feed-h) - 80px));
+  }
+
+  .px-legend {
+    position: fixed;
+    top: calc(var(--px-top-h) + var(--px-gap) * 2);
+    left: var(--px-gap);
+    right: var(--px-gap);
+    width: auto;
+    max-height: calc(100vh - var(--px-top-h) - 40px);
+  }
+
+  .px-feed {
+    width: calc(100% - var(--px-gap) * 2);
+    max-height: 34vh;
+  }
+
+  .px-feed.is-collapsed {
+    width: auto;
+    max-width: calc(100% - var(--px-gap) * 2);
+  }
+
+  .px-toasts {
+    right: var(--px-gap);
+  }
+}
+
+/* จอเล็กมาก (มือถือแนวตั้ง ~390px): เหลือแค่จุดสถานะ ข้อความยังอ่านได้ด้วย screen reader */
+@media (max-width: 480px) {
+  .px-conn-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .px-linkbtn {
+    padding: 3px 6px;
+  }
+
+  .px-stat {
+    padding: 3px 8px;
+  }
+}
+
+/* ===================================================================
+   11) reduced motion — ไม่กระพริบ ไม่สไลด์ (สถานะยังอ่านได้จากสี/ข้อความเหมือนเดิม)
+   =================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .px-hud *,
+  .px-hud *::before,
+  .px-hud *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .px-btn:active,
+  .px-linkbtn:active {
+    transform: none;
+  }
+}

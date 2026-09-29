@@ -52,13 +52,15 @@ node server.mjs --open
 ```
 
 `--open` launches your browser at NEURAL CORE, the 3D view. Without it, open
-<http://127.0.0.1:7676/brain.html> yourself (or <http://127.0.0.1:7676> for the classic view).
+<http://127.0.0.1:7676/brain.html> yourself (or <http://127.0.0.1:7676/pixel.html> for the pixel
+office, or <http://127.0.0.1:7676> for the classic view).
 
 You should see this on the terminal:
 
 ```
   Agent Activity Dashboard
     NEURAL CORE (3D)  → http://127.0.0.1:7676/brain.html
+    PIXEL OFFICE (2D) → http://127.0.0.1:7676/pixel.html
     Classic (2D)      → http://127.0.0.1:7676/
   watching C:\Users\you\.claude\sessions
          + C:\Users\you\.claude\projects
@@ -67,8 +69,8 @@ You should see this on the terminal:
   Ctrl+C to stop
 ```
 
-Both views are listed so you can pick either one straight from the terminal — the first line is
-the one `--open` launches. The `โควตา:` line means: *"Quota: the 5-hour window is live from the transcripts; the official
+All three views are listed so you can pick any of them straight from the terminal — the first line
+is the one `--open` launches. The `โควตา:` line means: *"Quota: the 5-hour window is live from the transcripts; the official
 percentage comes from cache (pass `--live-usage` to fetch it live)."*
 
 Stop the server with `Ctrl+C` — it prints `stopped` and exits cleanly.
@@ -92,6 +94,7 @@ Start (or already have) a Claude Code session — terminal, VS Code extension, d
   ```
   http://127.0.0.1:7676/?fixture=45
   http://127.0.0.1:7676/brain.html?fixture=cascade
+  http://127.0.0.1:7676/pixel.html?fixture=storm
   ```
 
 ---
@@ -210,10 +213,9 @@ number on screen instead of blanking the bar.
 | Empty dashboard, no error | no live sessions, or Claude Code has never run here. Try `/?fixture=45` to prove the UI works |
 | A session is stuck on `💭 คิดอยู่` with a growing clock | usually genuine — long thinking is normal and the tool refuses to guess a timeout. If you closed that window mid-turn, the process may still be alive; the data cannot tell the two apart |
 | Finished sessions linger | by design, for `--stale-minutes` (default 30). Lower it: `--stale-minutes 5` |
-| `/brain.html` shows *"เบราว์เซอร์นี้เปิด WebGL ไม่ได้"* | your browser/GPU has no WebGL. That screen links back to the classic view, which needs no WebGL |
-| `/brain.html` is black and never loads | a boot guard warns after 12 s. Try `?quality=low`, or use the classic view |
-| `--open` opened the 3D view, but I want the classic one | expected — `--open` always opens NEURAL CORE. Click `← หน้าคลาสสิก` in its bottom-right control bar, or open the classic URL printed right under it in the terminal banner |
-| No link from the classic view to the 3D one | there isn't one yet. Copy the `/brain.html` URL from the terminal banner (or type it); the 3D view *does* have a link back |
+| `/brain.html` shows *"เบราว์เซอร์นี้เปิด WebGL ไม่ได้"* | your browser/GPU has no WebGL. That screen links back to the classic view; neither the classic view nor the pixel view (`/pixel.html`) needs WebGL |
+| `/brain.html` is black and never loads | a boot guard warns after 12 s. Try `?quality=low`, or use the classic or pixel view |
+| `--open` opened the 3D view, but I want another one | expected — `--open` always opens NEURAL CORE. Click `← หน้าคลาสสิก` or `PIXEL OFFICE` in its bottom-right control bar, or open the URL printed under it in the terminal banner |
 | Deep sub-agents look like children of the session | should not happen — parents are pulled back in past the send cap. If you see it, please open an issue with what you did |
 | Old tool calls missing from a long session | expected: each transcript is seeded from its last 256 KB only |
 | Edited `server.mjs`, nothing changed | there is no hot reload. Restart it |

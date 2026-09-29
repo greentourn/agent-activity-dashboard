@@ -233,6 +233,30 @@
         background: var(--ok);
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
       }
+      /*
+       * ลิงก์ไปอีกสองมุมมอง — ทั้งสามหน้ากินสตรีมเดียวกัน สลับไปมาได้ทุกเมื่อ
+       * เดิมหน้านี้ไม่มีทางไปหน้าอื่นเลย ต้องจำ URL จาก banner ของ server เอง
+       */
+      .views {
+        display: inline-flex;
+        gap: 6px;
+      }
+      .views a {
+        padding: 5px 10px;
+        border-radius: 9px;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--fg-dim);
+        font: 600 11px/1.2 var(--mono);
+        letter-spacing: 0.04em;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .views a:hover,
+      .views a:focus-visible {
+        color: var(--accent);
+        border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+      }
 
       /* ---------- the fan-out state strip, above the graph ---------- */
       .band {
@@ -1207,6 +1231,10 @@
           <span class="agent-voice-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
         </div>
         <span class="conn" id="conn"><i></i> <span>ต่อ…</span></span>
+        <nav class="views" aria-label="สลับมุมมอง">
+          <a href="/brain.html" title="มุมมองสามมิติ — ภาพรวมของทั้งระบบในแวบเดียว">NEURAL CORE</a>
+          <a href="/pixel.html" title="ออฟฟิศพิกเซล — ตัวละครเดินไปทำงานตามเครื่องมือที่ใช้จริง">PIXEL OFFICE</a>
+        </nav>
       </div>
     </header>
 

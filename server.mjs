@@ -2707,11 +2707,12 @@ server.listen(ARGS.port, "127.0.0.1", () => {
   // `--open` launches the 3D view. brain.html falls back to a "← กลับไปหน้าคลาสสิก" link on its own
   // when WebGL is unavailable, so defaulting to it never strands anyone.
   const openUrl = `${url}/brain.html`;
-  // Both views come off this one server, but the classic page has no link to the 3D one — so
-  // list both URLs here, where the person choosing is actually looking. The one `--open`
-  // launches goes first; the other line is there to be clicked/copied.
+  // All three views come off this one server and link to each other, but list every URL here
+  // anyway — this is where the person choosing is actually looking. The one `--open` launches
+  // goes first; the other lines are there to be clicked/copied.
   process.stdout.write(`\n  Agent Activity Dashboard\n`);
   process.stdout.write(`    NEURAL CORE (3D)  → ${openUrl}\n`);
+  process.stdout.write(`    PIXEL OFFICE (2D) → ${url}/pixel.html\n`);
   process.stdout.write(`    Classic (2D)      → ${url}/\n`);
   process.stdout.write(`  watching ${SESSIONS_DIR}\n`);
   process.stdout.write(`         + ${PROJECTS_DIR}\n`);

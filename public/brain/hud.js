@@ -639,7 +639,10 @@ export function createHud(root, options = {}) {
 
     const classicLink = el("a", "hud-classic-link", "← หน้าคลาสสิก");
     classicLink.href = "/index.html";
-    controls.append(classicLink);
+    /* มุมมองที่สาม (ออฟฟิศพิกเซล 2 มิติ) — คลาสเดียวกับลิงก์คลาสสิก หน้าตาจึงเหมือนกัน ขึ้นแถวของตัวเองใต้กัน */
+    const pixelLink = el("a", "hud-classic-link", "PIXEL OFFICE");
+    pixelLink.href = "/pixel.html";
+    controls.append(classicLink, pixelLink);
 
     applyAutorotateBtn();
     refs.controls = controls;

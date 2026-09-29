@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#12131f" />
+    <title>PIXEL OFFICE — Agent Dashboard</title>
+    <!-- ไม่มีไอคอนแท็บ: ใส่ data URI ว่างไว้กันเบราว์เซอร์ยิง /favicon.ico ที่ server ไม่มี (404 ทุกครั้งที่เปิดหน้า) -->
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/activity-audio.css" />
+    <link rel="stylesheet" href="/pixel/pixel.css" />
+
+    <!--
+      หน้านี้คือ UI มุมมองที่สามของ agent-dashboard: "PIXEL OFFICE"
+        · /index.html  — คลาสสิก (SVG 2 มิติ)
+        · /brain.html  — NEURAL CORE (three.js 3 มิติ)
+        · /pixel.html  — ออฟฟิศพิกเซล: ทุก session คือห้อง 1 ห้อง หัวหน้า (agent หลัก) กับผู้ช่วย
+                         (sub-agent) เป็นตัวละครตัวเดิมเสมอ เดินไปทำงานตามสถานีที่ตรงกับเครื่องมือจริง
+      กินข้อมูลจาก SSE ตัวเดียวกัน (/api/stream) ผ่าน brain/store.js ชุดเดียวกับ NEURAL CORE
+
+      ภาพทั้งหมดวาดด้วยโค้ด (pixel map ในรูปสตริง → canvas) — ไม่มีไฟล์ภาพ ไม่มี CDN ไม่มีเว็บฟอนต์
+      เพราะแดชบอร์ดนี้ต้องเปิดได้ตอนเน็ตล่ม/ออฟไลน์ ซึ่งมักเป็นวันที่อยากดูมันที่สุด
+      หน้านี้ใช้ Canvas 2D ล้วน จึงไม่ต้องเช็ก WebGL แบบ brain.html
+    -->
+
+    <style>
+      /* ─── ฐานของหน้า: ทุกอย่างที่ไม่ใช่ HUD (HUD อยู่ใน /pixel/pixel.css) ───
+         สีเขียนตรง ๆ ไม่อ้างตัวแปรจาก pixel.css — ถ้า pixel.css โหลดไม่ขึ้น จอโหลด/จอ error ต้องยังอ่านได้ */
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #12131f;
+        color: #f4f4f4;
+        font-family: "Segoe UI", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
+        overscroll-behavior: none;
+      }
+
+      /*
+       * canvas เต็มจอ ขยายแบบพิกเซลแข็ง — scene.js วาดด้วย imageSmoothingEnabled=false ที่ความละเอียด
+       * backing store จริงอยู่แล้ว แต่ถ้า CSS px กับ backing store ไม่ลงตัว (DPR เศษส่วน) เบราว์เซอร์จะ
+       * เกลี่ยสีให้เบลอ — pixelated บังคับให้ขยายแบบ nearest-neighbour เสมอ
+       * (crisp-edges ก่อน pixelated: Chrome/Edge/Firefox รุ่นใหม่ใช้ตัวหลัง รุ่นเก่าใช้ตัวแรก)
+       */
+      #stage {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: #12131f;
+        touch-action: none;
+        cursor: grab;
+        image-rendering: crisp-edges;
+        image-rendering: pixelated;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
+      #stage:active {
+        cursor: grabbing;
+      }
+
+      #hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none; /* คลิก/ลากทะลุไปที่ฉากได้ ยกเว้นแผงและตัวควบคุมที่เปิด pointer-events เอง */
+        z-index: 10;
+      }
+
+      /* ─── จอโหลด / จอ error ─── */
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        background: #12131f;
+        transition: opacity 0.5s steps(5, end);
+        font-family: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+      }
+
+      #boot.gone {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .boot-card {
+        width: min(560px, 100%);
+        padding: 22px 22px 18px;
+        text-align: center;
+        background: #1a1c2c;
+        border: 2px solid #566c86;
+        box-shadow: inset 2px 2px 0 0 rgba(244, 244, 244, 0.08), inset -2px -2px 0 0 rgba(0, 0, 0, 0.35),
+          4px 4px 0 0 #0b0c14;
+      }
+
+      /* ตึกออฟฟิศ 8×8 พิกเซล (สเกล 4) — ภาพเดียวกับตราบนแถบ HUD วาดด้วย gradient ทีละก้อน */
+      .boot-art {
+        width: 32px;
+        height: 32px;
+        margin: 0 auto 14px;
+        background: linear-gradient(#ffcd75 0 0) 8px 8px / 4px 4px no-repeat,
+          linear-gradient(#ffcd75 0 0) 20px 8px / 4px 4px no-repeat,
+          linear-gradient(#ffcd75 0 0) 8px 16px / 4px 4px no-repeat,
+          linear-gradient(#1a1c2c 0 0) 20px 16px / 4px 4px no-repeat,
+          linear-gradient(#8f563b 0 0) 12px 24px / 8px 8px no-repeat,
+          linear-gradient(#566c86 0 0) 0 28px / 32px 4px no-repeat,
+          linear-gradient(#29366f 0 0) 8px 0 / 16px 4px no-repeat,
+          linear-gradient(#3b5dc9 0 0) 4px 4px / 24px 24px no-repeat;
+      }
+
+      .boot-title {
+        margin-bottom: 14px;
+        color: #ffcd75;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-shadow: 2px 2px 0 #b13e53;
+      }
+
+      /* แถบโหลดแบบบล็อก: เติมทีละช่องด้วย steps() ให้ดูเป็นเกมพิกเซล ไม่ใช่แถบลื่น ๆ */
+      .boot-bar {
+        width: 164px;
+        height: 16px;
+        margin: 0 auto 14px;
+        padding: 2px;
+        border: 2px solid #94b0c2;
+        background: #0b0c14;
+      }
+
+      .boot-bar > i {
+        display: block;
+        width: 0;
+        height: 100%;
+        background: repeating-linear-gradient(90deg, #ffcd75 0 12px, transparent 12px 16px);
+        animation: boot-fill 1.6s steps(10, end) infinite;
+      }
+
+      @keyframes boot-fill {
+        from {
+          width: 0;
+        }
+        to {
+          width: 100%;
+        }
+      }
+
+      .boot-note {
+        color: #94b0c2;
+        font-family: "Segoe UI", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      #boot.failed .boot-title {
+        color: #ef7d57;
+      }
+
+      #boot.failed .boot-bar {
+        border-color: #b13e53;
+      }
+
+      #boot.failed .boot-bar > i {
+        width: 100%;
+        animation: none;
+        background: repeating-linear-gradient(90deg, #b13e53 0 12px, transparent 12px 16px);
+      }
+
+      .boot-error {
+        display: none;
+        margin: 14px 0 0;
+        padding: 10px 12px;
+        text-align: left;
+        font-size: 11px;
+        line-height: 1.6;
+        color: #ffd2c4;
+        background: #0b0c14;
+        border: 2px solid #b13e53;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 42vh;
+        overflow: auto;
+      }
+
+      #boot.failed .boot-error {
+        display: block;
+      }
+
+      .boot-link {
+        display: inline-block;
+        margin-top: 14px;
+        padding: 4px 8px;
+        color: #73eff7;
+        font-family: "Segoe UI", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        text-decoration: none;
+        border: 2px solid #257179;
+        box-shadow: 2px 2px 0 0 #0b0c14;
+      }
+
+      .boot-link:hover {
+        color: #1a1c2c;
+        background: #73eff7;
+        border-color: #73eff7;
+      }
+
+      .boot-link:focus-visible {
+        outline: 2px solid #ffcd75;
+        outline-offset: 2px;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #boot {
+          transition: none;
+        }
+        /* ไม่วิ่งวน — ค้างไว้ครึ่งแถบให้รู้ว่ากำลังโหลด */
+        .boot-bar > i {
+          animation: none;
+          width: 50%;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <canvas
+      id="stage"
+      role="img"
+      aria-label="ออฟฟิศพิกเซล: ลากเพื่อเลื่อนฉาก ล้อเมาส์เพื่อซูม คลิกตัวละครเพื่อดูรายละเอียด"
+    ></canvas>
+    <div id="hud"></div>
+
+    <div id="boot" role="status" aria-live="polite">
+      <div class="boot-card">
+        <div class="boot-art" aria-hidden="true"></div>
+        <div class="boot-title" id="boot-title">PIXEL OFFICE</div>
+        <div class="boot-bar" aria-hidden="true"><i></i></div>
+        <div class="boot-note" id="boot-note">กำลังเปิดไฟออฟฟิศ — โหลดสคริปต์และต่อสตรีม /api/stream …</div>
+        <pre class="boot-error" id="boot-error"></pre>
+        <a class="boot-link" href="/index.html">← กลับไปหน้าคลาสสิก</a>
+      </div>
+    </div>
+
+    <noscript>
+      <p style="position: fixed; inset: auto 0 24px; margin: 0; text-align: center; color: #ffcd75; z-index: 60">
+        หน้านี้ต้องเปิด JavaScript — หรือใช้หน้าคลาสสิกที่ /index.html
+      </p>
+    </noscript>
+
+    <script>
+      /*
+       * ตัวจับความล้มเหลวของ ES module — ถ้า import พัง (พิมพ์พาธผิด / ไฟล์หาย / syntax error)
+       * เบราว์เซอร์จะไม่แสดงอะไรบนจอเลย เหลือแค่จอมืดกับ error ใน console ซึ่งเป็นอาการที่ debug
+       * ยากที่สุด จึงดักไว้แล้วพ่นขึ้นจอตรงนี้ (แบบเดียวกับ brain.html)
+       *
+       * ต่างจาก brain.html สองข้อ:
+       *   1. ไม่เช็ก WebGL — หน้านี้เป็น Canvas 2D ล้วน
+       *   2. /activity-audio.js โหลดไม่ขึ้นไม่นับว่าพัง — main.js รับมือกรณีไม่มี audio engine
+       *      ได้เอง (ปุ่มเสียงขึ้น "ไม่รองรับ") การปิดทั้งหน้าเพราะเสียงหายคือโทษที่เกินเหตุ
+       *   และหลังเฟรมแรกออกแล้ว error ทีหลังจะไม่เด้งจอ error ทับฉาก (main.js ครอบทุก callback
+       *   กันลูปตายอยู่แล้ว) — ให้ไปดูใน Console แทน
+       */
+      (function bootGuard() {
+        var boot = document.getElementById("boot");
+        var title = document.getElementById("boot-title");
+        var note = document.getElementById("boot-note");
+        var box = document.getElementById("boot-error");
+        var started = false;
+        var failed = false;
+
+        function fail(message) {
+          if (started || !boot) return;
+          failed = true;
+          boot.classList.remove("gone");
+          boot.classList.add("failed");
+          title.textContent = "ออฟฟิศเปิดไม่ขึ้น";
+          note.textContent = "เปิด DevTools › Console เพื่อดูรายละเอียดเต็ม";
+          var msg = String(message || "unknown error");
+          /* error มักมาเป็นชุด (ไฟล์หนึ่งหาย → import ต่อ ๆ กันพังตาม) เก็บทุกข้อไว้ ไม่ทับกัน */
+          box.textContent = box.textContent ? box.textContent + "\n\n" + msg : msg;
+        }
+
+        window.addEventListener(
+          "error",
+          function (e) {
+            var t = e && e.target;
+            if (t && t !== window && t.tagName) {
+              if (t.tagName !== "SCRIPT") return; /* CSS/รูป โหลดไม่ขึ้น ไม่ทำให้ฉากเปิดไม่ได้ */
+              var src = t.src || "?";
+              if (/\/activity-audio\.js(?:[?#]|$)/.test(src)) {
+                if (window.console) console.warn("[pixel] โหลด /activity-audio.js ไม่สำเร็จ — ทำงานต่อแบบไม่มีเสียง");
+                return;
+              }
+              fail("โหลดสคริปต์ไม่สำเร็จ: " + src);
+              return;
+            }
+            var where = e && e.filename ? "\n  @ " + e.filename + ":" + (e.lineno || 0) + ":" + (e.colno || 0) : "";
+            fail(((e && e.message) || "error") + where);
+          },
+          true
+        );
+
+        window.addEventListener("unhandledrejection", function (e) {
+          var r = e && e.reason;
+          fail("promise rejected: " + ((r && (r.stack || r.message)) || r));
+        });
+
+        /* main.js จะเรียกตัวนี้เมื่อเฟรมแรกวาดสำเร็จ */
+        window.__bootReady = function () {
+          if (started || failed) return;
+          started = true;
+          boot.classList.add("gone");
+          setTimeout(function () {
+            if (boot.parentNode) boot.parentNode.removeChild(boot);
+          }, 800);
+        };
+
+        /* ถ้า 12 วินาทีแล้วยังไม่มีเฟรมแรก ให้บอกว่าน่าจะมีอะไรผิด แทนที่จะโหลดวนไปเรื่อย ๆ */
+        setTimeout(function () {
+          if (!started && !failed) {
+            note.textContent =
+              "ยังไม่มีเฟรมแรกหลัง 12 วินาที — ลองรีเฟรช หรือเปิด DevTools › Console ดูว่าไฟล์ใน /pixel/ หรือ /brain/ ตัวไหนโหลดไม่ขึ้น";
+          }
+        }, 12000);
+      })();
+    </script>
+
+    <!-- plain script เพื่อให้ทั้งสามหน้าใช้ audio engine ชุดเดียวกัน (window.AgentActivityAudio) -->
+    <script src="/activity-audio.js"></script>
+    <script type="module" src="/pixel/main.js"></script>
+  </body>
+</html>
