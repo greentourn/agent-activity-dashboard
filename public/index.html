@@ -1230,6 +1230,13 @@
           </select>
           <span class="agent-voice-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
         </div>
+        <label class="agent-voice-picker" for="ai-voice-choice">
+          เสียงพูด
+          <select id="ai-voice-choice" aria-label="เลือกเสียงพูดในเครื่องหรือออนไลน์">
+            <option value="">อัตโนมัติ</option>
+          </select>
+          <small class="agent-voice-online-note" hidden>เสียงออนไลน์อาจส่งข้อความพูดไปยังผู้ให้บริการ</small>
+        </label>
         <span class="conn" id="conn"><i></i> <span>ต่อ…</span></span>
         <nav class="views" aria-label="สลับมุมมอง">
           <a href="/brain.html" title="มุมมองสามมิติ — ภาพรวมของทั้งระบบในแวบเดียว">NEURAL CORE</a>
@@ -3656,6 +3663,7 @@
       const aiVoiceLabel = aiVoiceButton.querySelector(".agent-voice-label");
       const aiVoiceIcon = aiVoiceButton.querySelector(".agent-voice-icon");
       const aiVoiceModeSelect = $("#ai-voice-mode");
+      const aiVoiceChoiceSelect = $("#ai-voice-choice");
       const aiWaitRemindersToggle = $("#beep");
       const aiVoiceBars = [...aiVoiceButton.querySelectorAll(".agent-voice-meter > i")];
       const voiceCueTimers = new WeakMap();
@@ -3728,6 +3736,11 @@
         const voiceAvailable = state.voiceAvailable !== false;
         aiVoiceModeSelect.disabled = !state.supported;
         aiVoiceModeSelect.value = mode;
+        if (activityAudioApi && typeof activityAudioApi.syncVoiceSelect === "function") {
+          activityAudioApi.syncVoiceSelect(aiVoiceChoiceSelect, state);
+        } else {
+          aiVoiceChoiceSelect.disabled = true;
+        }
         aiWaitRemindersToggle.checked = remindersEnabled;
         // This is a remembered preference in its own right, so keep it changeable even while the
         // audible mode is off. It simply stays dormant until the user turns sound back on.
@@ -3751,9 +3764,9 @@
             : mode === "voice"
               ? voiceAvailable
                 ? state.voiceFallback
-                  ? `ไม่พบเสียงภาษาไทย — ใช้เสียงของเครื่องพูดภาษาอังกฤษแทน${state.voiceName ? ` · ${state.voiceName}` : ""}`
+                  ? `เสียงนี้พูดประโยคภาษาอังกฤษ${state.voiceName ? ` · ${state.voiceName}` : ""}`
                   : `พูดภาษาไทยพร้อมเอฟเฟกต์${state.voiceName ? ` · ${state.voiceName}` : ""}`
-                : "ไม่พบเสียงพูดในเครื่องเลย — จะเล่นเอฟเฟกต์แทน"
+                : "ไม่พบเสียงพูดในเครื่อง — เลือกเสียงออนไลน์ได้ หรือใช้เอฟเฟกต์ต่อ"
               : mode === "effects"
                 ? "เอฟเฟกต์เสียงเท่านั้น ไม่มีเสียงพูด"
                 : "ปิดเสียงเหตุการณ์ของ AI";
@@ -3849,7 +3862,14 @@
         }
       }
 
+      function changeVoiceChoice() {
+        if (typeof activityAudio.setVoice === "function") {
+          renderActivityVoiceState(activityAudio.setVoice(aiVoiceChoiceSelect.value, { userGesture: true, preview: true }));
+        }
+      }
+
       aiVoiceModeSelect.addEventListener("change", changeActivityAudioMode);
+      aiVoiceChoiceSelect.addEventListener("change", changeVoiceChoice);
       aiWaitRemindersToggle.addEventListener("change", changeWaitingReminders);
 
       window.addEventListener(

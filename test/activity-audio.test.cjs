@@ -33,6 +33,10 @@ function fakeSpeech() {
     removeEventListener(type) {
       listeners.delete(type);
     },
+    dispatch(type) {
+      const listener = listeners.get(type);
+      if (listener) listener();
+    },
     speak(utterance) {
       this.spoken.push(utterance);
       if (utterance.onstart) utterance.onstart();
@@ -641,7 +645,7 @@ test("effects-only keeps every event cue but does not start browser speech", asy
   assert.equal(h.speech.spoken.length, 0);
 });
 
-test("voice mode keeps activity local: a remote-only Thai voice falls back to effects", async (t) => {
+test("automatic voice mode stays local: a remote-only Thai voice falls back to effects", async (t) => {
   const api = await loadApi();
   const remoteOnlySpeech = fakeSpeech();
   remoteOnlySpeech.getVoices = () => [{ name: "Remote Thai", lang: "th-TH", localService: false }];
@@ -661,6 +665,108 @@ test("voice mode keeps activity local: a remote-only Thai voice falls back to ef
   controller.announce("prompt", { force: true, timestamp: Date.now(), eventKey: "remote-only" });
   assert.equal(remoteOnlySpeech.spoken.length, 0);
   assert.ok(visuals.some((event) => event.phase === "cue" && event.kind === "prompt"));
+});
+
+test("online and Natural voices are selectable, remembered, and use the matching phrase language", async (t) => {
+  const api = await loadApi();
+  const local = { voiceURI: "local:thai", name: "Thai local", lang: "th-TH", localService: true };
+  const onlineThai = { voiceURI: "remote:thai", name: "Thai Online (Natural)", lang: "th-TH", localService: false };
+  const onlineEnglish = { voiceURI: "remote:english", name: "English Online (Natural)", lang: "en-US", localService: false };
+  const speech = fakeSpeech();
+  speech.getVoices = () => [local, onlineThai, onlineEnglish];
+  const storage = fakeStorage();
+  const create = () => api.create({
+    storage, speechSynthesis: speech, SpeechSynthesisUtterance: FakeUtterance,
+    AudioContext: null, document: null,
+  });
+  let controller = create();
+  t.after(() => controller.dispose());
+  let state = controller.getState();
+  assert.equal(state.voiceName, "Thai local");
+  assert.deepEqual(state.voiceOptions.map((voice) => voice.online), [false, true, true]);
+  const thaiId = state.voiceOptions[1].id;
+  const englishId = state.voiceOptions[2].id;
+
+  controller.setMode("voice", { userGesture: true, preview: false });
+  controller.setVoice(thaiId, { userGesture: true, preview: false });
+  controller.announce("prompt", { force: true, eventKey: "online-thai", timestamp: Date.now() });
+  assert.equal(speech.spoken.at(-1).voice, onlineThai);
+  assert.ok(THAI_TEXT.test(speech.spoken.at(-1).text));
+  controller.setVoice(englishId, { userGesture: true, preview: false });
+  controller.announce("prompt", { force: true, eventKey: "online-english", timestamp: Date.now() });
+  assert.equal(speech.spoken.at(-1).voice, onlineEnglish);
+  assert.ok(!THAI_TEXT.test(speech.spoken.at(-1).text));
+  assert.equal(storage.value(api.VOICE_STORAGE_KEY), englishId);
+
+  controller.dispose();
+  controller = create();
+  state = controller.getState();
+  assert.equal(state.voicePreference, englishId);
+  assert.equal(state.voiceOnline, true);
+  assert.equal(state.voiceName, "English Online (Natural)");
+  controller.setVoice("", { preview: false });
+  assert.equal(controller.getState().voiceName, "Thai local");
+  assert.equal(storage.value(api.VOICE_STORAGE_KEY), "");
+});
+
+test("a chosen online voice temporarily falls back to local when it disappears", async (t) => {
+  const api = await loadApi();
+  const local = { voiceURI: "local:thai", name: "Thai local", lang: "th-TH", localService: true };
+  const remote = { voiceURI: "remote:thai", name: "Thai Online (Natural)", lang: "th-TH", localService: false };
+  let voices = [local, remote];
+  const speech = fakeSpeech();
+  speech.getVoices = () => voices;
+  const controller = api.create({
+    storage: fakeStorage(), speechSynthesis: speech, SpeechSynthesisUtterance: FakeUtterance,
+    AudioContext: null, document: null,
+  });
+  t.after(() => controller.dispose());
+  const remoteId = controller.getState().voiceOptions[1].id;
+  controller.setVoice(remoteId);
+  voices = [local];
+  speech.dispatch("voiceschanged");
+  assert.equal(controller.getState().voicePreference, remoteId);
+  assert.equal(controller.getState().voiceName, "Thai local");
+  voices = [local, remote];
+  speech.dispatch("voiceschanged");
+  assert.equal(controller.getState().voiceName, "Thai Online (Natural)");
+});
+
+test("voice choices include only Thai and English, and an old foreign-language choice resets", async (t) => {
+  const api = await loadApi();
+  const japanese = { voiceURI: "local:ja", name: "Japanese", lang: "ja-JP", localService: true, default: true };
+  const frenchOnline = { voiceURI: "remote:fr", name: "French Online", lang: "fr-FR", localService: false };
+  const english = { voiceURI: "local:en", name: "English", lang: "en-US", localService: true };
+  const thaiOnline = { voiceURI: "remote:th", name: "Thai Online (Natural)", lang: "th-TH", localService: false };
+  const storage = fakeStorage({
+    [api.VOICE_STORAGE_KEY]: JSON.stringify([japanese.voiceURI, japanese.name, japanese.lang]),
+  });
+  const speech = fakeSpeech();
+  speech.getVoices = () => [japanese, frenchOnline, english, thaiOnline];
+  const controller = api.create({
+    storage, speechSynthesis: speech, SpeechSynthesisUtterance: FakeUtterance,
+    AudioContext: null, document: null,
+  });
+  t.after(() => controller.dispose());
+  const state = controller.getState();
+  assert.deepEqual(state.voiceOptions.map((voice) => voice.lang), ["en-US", "th-TH"]);
+  assert.equal(state.voicePreference, "");
+  assert.equal(storage.value(api.VOICE_STORAGE_KEY), "");
+  assert.equal(state.voiceName, "English");
+  controller.setVoice(JSON.stringify([frenchOnline.voiceURI, frenchOnline.name, frenchOnline.lang]));
+  assert.equal(controller.getState().voicePreference, "");
+});
+
+test("automatic speech does not use an unrelated language when no Thai or English voice exists", async (t) => {
+  const { controller, speech } = await voicesHarness([
+    { name: "Japanese", lang: "ja-JP", localService: true, default: true },
+  ]);
+  t.after(() => controller.dispose());
+  controller.setMode("voice", { userGesture: true, preview: false });
+  assert.equal(controller.getState().voiceOptions.length, 0);
+  assert.equal(controller.getState().voiceAvailable, false);
+  controller.announce("prompt", { force: true, timestamp: Date.now(), eventKey: "no-th-or-en" });
+  assert.equal(speech.spoken.length, 0);
 });
 
 async function voicesHarness(voices) {

@@ -12,6 +12,7 @@
   // Keep the original key so an existing "1" opt-in migrates to the new voice mode.
   const STORAGE_KEY = "agent-activity-dashboard.ai-voice.v1";
   const REMINDERS_STORAGE_KEY = "agent-activity-dashboard.ai-wait-reminders.v1";
+  const VOICE_STORAGE_KEY = "agent-activity-dashboard.ai-voice-choice.v1";
   const EVENT_TTL_MS = 12_000;
   const QUEUE_TTL_MS = 10_000;
   const MAX_SPEECH_QUEUE = 4;
@@ -168,6 +169,10 @@
     return /^en(?:-|_|$)/i.test(String(value || ""));
   }
 
+  function isSelectableVoice(voice) {
+    return !!voice && (isThaiLang(voice.lang) || isEnglishLang(voice.lang));
+  }
+
   function safeCall(fn, ...args) {
     if (typeof fn !== "function") return;
     try {
@@ -288,9 +293,8 @@
     return typeof choose === "function" ? choose(poolKey, pool) : pool[0];
   }
 
-  // Prefer the machine's own default voice when it can read English, then any English voice,
-  // then whatever local default exists. Only local voices are ever considered so the offline
-  // promise holds even on browsers that also list cloud voices.
+  // Automatic fallback prefers the machine's local English default, then any local English
+  // voice, then another local default. Online voices require an explicit choice.
   function pickFallbackVoice(localVoices) {
     if (!localVoices.length) return null;
     const english = localVoices.filter((v) => isEnglishLang(v.lang));
@@ -300,6 +304,58 @@
       localVoices.find((v) => v.default === true) ||
       localVoices[0]
     );
+  }
+
+  function voiceId(voice) {
+    return JSON.stringify([voice.voiceURI || "", voice.name || "", voice.lang || ""]);
+  }
+
+  function isSelectableVoiceId(id) {
+    try {
+      const parts = JSON.parse(id);
+      return Array.isArray(parts) && (isThaiLang(parts[2]) || isEnglishLang(parts[2]));
+    } catch {
+      return false;
+    }
+  }
+
+  // All three views use the same voice menu. Rebuild only when the available voices change.
+  function syncVoiceSelect(select, state) {
+    if (!select) return;
+    const voices = Array.isArray(state.voiceOptions) ? state.voiceOptions : [];
+    const preference = isSelectableVoiceId(state.voicePreference) ? state.voicePreference : "";
+    const missing = preference && !voices.some((voice) => voice.id === preference);
+    const signature = JSON.stringify([voices, missing ? preference : ""]);
+    if (select.dataset.voiceOptions !== signature) {
+      const doc = select.ownerDocument;
+      const options = [];
+      const automatic = doc.createElement("option");
+      automatic.value = "";
+      automatic.textContent = "อัตโนมัติ";
+      options.push(automatic);
+      for (const voice of voices) {
+        const option = doc.createElement("option");
+        option.value = voice.id;
+        option.textContent = `${voice.name || "เสียงไม่มีชื่อ"} (${voice.lang || "ไม่ทราบภาษา"})${voice.online ? " · ออนไลน์" : " · ในเครื่อง"}`;
+        options.push(option);
+      }
+      if (missing) {
+        const option = doc.createElement("option");
+        option.value = preference;
+        option.textContent = "เสียงที่เลือกไว้ไม่พร้อมใช้งาน (ใช้เสียงอัตโนมัติชั่วคราว)";
+        options.push(option);
+      }
+      select.replaceChildren(...options);
+      select.dataset.voiceOptions = signature;
+    }
+    select.value = preference;
+    select.disabled = !state.speechSupported || voices.length === 0;
+    const selected = voices.find((voice) => voice.id === state.selectedVoiceId);
+    select.title = !voices.length ? "ไม่พบเสียงพูดในเบราว์เซอร์" :
+      selected && selected.online ? "เสียงออนไลน์อาจส่งข้อความพูดไปยังผู้ให้บริการของเบราว์เซอร์" :
+      "เลือกเสียงพูดในเครื่องหรือออนไลน์";
+    const warning = select.parentElement && select.parentElement.querySelector(".agent-voice-online-note");
+    if (warning) warning.hidden = !(selected && selected.online);
   }
 
   function semanticFromRaw(ev, base, fallbackNow) {
@@ -351,17 +407,21 @@
     const clearEvery = opts.clearInterval || env.clearInterval.bind(env);
     const key = opts.storageKey || STORAGE_KEY;
     const remindersKey = opts.remindersStorageKey || REMINDERS_STORAGE_KEY;
+    const voiceKey = opts.voiceStorageKey || VOICE_STORAGE_KEY;
 
     let mode = "off";
     let remindersEnabled = true;
+    let voicePreference = "";
     try {
       const storedMode = storage && storage.getItem(key);
       mode = storedMode === "1" ? "voice" : AUDIO_MODES.has(storedMode) ? storedMode : "off";
       const storedReminders = storage && storage.getItem(remindersKey);
       remindersEnabled = storedReminders == null ? true : storedReminders !== "0" && storedReminders !== "false";
+      voicePreference = storage && storage.getItem(voiceKey) || "";
     } catch {
       mode = "off";
       remindersEnabled = true;
+      voicePreference = "";
     }
 
     let disposed = false;
@@ -379,6 +439,7 @@
     let pulseTimer = null;
     let speechWatchdog = null;
     let selectedVoice = null;
+    let availableVoices = [];
     let voicesResolved = false;
     let sequence = 0;
     let stateTransitionSequence = 0;
@@ -419,8 +480,13 @@
         speaking: !!currentSpeech,
         level,
         voiceName: selectedVoice ? selectedVoice.name || "" : "",
-        // "th" when a local Thai voice speaks the Thai phrases, "en" when the machine's own
-        // voice reads the English fallback set, "" when no local voice exists.
+        voicePreference,
+        selectedVoiceId: selectedVoice ? voiceId(selectedVoice) : "",
+        voiceOptions: availableVoices.map((voice) => ({
+          id: voiceId(voice), name: voice.name || "", lang: voice.lang || "", online: voice.localService !== true,
+        })),
+        voiceOnline: !!selectedVoice && selectedVoice.localService !== true,
+        // "th" for Thai phrases, "en" for the English fallback, "" when no voice is selected.
         voiceLanguage: selectedVoice ? (voiceIsThai() ? "th" : "en") : "",
         voiceFallback: !!selectedVoice && !voiceIsThai(),
       };
@@ -476,6 +542,7 @@
     function chooseVoice() {
       if (!speech || typeof speech.getVoices !== "function") {
         voicesResolved = true;
+        availableVoices = [];
         selectedVoice = null;
         emitState();
         return null;
@@ -487,15 +554,48 @@
         voices = [];
       }
       voicesResolved = voices.length > 0;
-      // Keep the privacy/offline promise honest. A browser may list cloud voices too, but this
-      // dashboard only speaks through a voice that declares itself local. A local Thai voice is
-      // always preferred; without one, the machine's own default voice reads the English phrase
-      // set instead so the voice mode still talks. With no local voice at all it stays effects-only
-      // rather than sending activity text away.
-      const local = voices.filter((v) => v && v.localService === true);
-      selectedVoice = local.find((v) => isThaiLang(v.lang)) || pickFallbackVoice(local);
+      // Keep the list short and ensure English phrases are never sent to an unrelated language voice.
+      // Automatic selection stays local; a remote voice still requires an explicit choice.
+      availableVoices = voices.filter(isSelectableVoice);
+      if (voicePreference && !isSelectableVoiceId(voicePreference)) {
+        voicePreference = "";
+        try {
+          if (storage) storage.setItem(voiceKey, "");
+        } catch {
+          /* private mode / storage disabled */
+        }
+      }
+      const localVoices = availableVoices.filter((voice) => voice.localService === true);
+      const previousId = selectedVoice ? voiceId(selectedVoice) : "";
+      selectedVoice = availableVoices.find((voice) => voiceId(voice) === voicePreference) ||
+        localVoices.find((voice) => isThaiLang(voice.lang)) || pickFallbackVoice(localVoices);
+      if (previousId !== (selectedVoice ? voiceId(selectedVoice) : "") && (currentSpeech || speechQueue.length)) {
+        cancel("voice-changed");
+      }
       emitState();
       return selectedVoice;
+    }
+
+    function setVoice(next, config) {
+      const value = String(next || "");
+      if (value && !availableVoices.some((voice) => voiceId(voice) === value)) return publicState();
+      if (value === voicePreference) return publicState();
+      voicePreference = value;
+      try {
+        if (storage) storage.setItem(voiceKey, value);
+      } catch {
+        /* private mode / storage disabled */
+      }
+      chooseVoice();
+      const cfg = config || {};
+      if (cfg.userGesture && mode === "voice") {
+        if (!unlocked) unlock(cfg.preview !== false);
+        else {
+          resumeAudio();
+          if (cfg.preview !== false && selectedVoice) announceCurrentOrReady();
+        }
+      }
+      return publicState();
     }
 
     function voiceIsThai() {
@@ -703,10 +803,9 @@
       // ประโยคถูกเลือกให้ตรงภาษาของ voice ตั้งแต่ตอน announce แล้ว; lang ต้องตรงกันด้วยไม่งั้น
       // บาง engine จะสลับไปใช้ voice อื่นเงียบ ๆ
       utterance.lang = voiceIsThai() ? "th-TH" : selectedVoice.lang || "en-US";
-      // Full browser volume keeps Thai consonants clear; the slightly synthetic pitch preserves
-      // the futuristic character without making every line sound like the same harsh robot.
+      // Preserve a Natural voice's own timbre; local voices keep the dashboard's slight pitch shift.
       utterance.rate = 1.02;
-      utterance.pitch = 0.9;
+      utterance.pitch = selectedVoice.localService === true ? 0.9 : 1;
       utterance.volume = 1;
       utterance.voice = selectedVoice;
       item.token = ++sequence;
@@ -1347,7 +1446,7 @@
         target &&
         typeof target.closest === "function" &&
         target.closest(
-          ".agent-voice-toggle, [data-audio-mode], .hud-audio-controls, .agent-wait-reminder-toggle, .hud-btn-reminders",
+          ".agent-voice-toggle, .agent-voice-picker, [data-audio-mode], .hud-audio-controls, .agent-wait-reminder-toggle, .hud-btn-reminders",
         )
       ) return;
       if (enabled() && !unlocked) unlock(true);
@@ -1356,6 +1455,11 @@
 
     function storageChanged(event) {
       if (!event) return;
+      if (event.key === voiceKey) {
+        voicePreference = event.newValue || "";
+        chooseVoice();
+        return;
+      }
       if (event.key === remindersKey) {
         const next = event.newValue == null ? true : event.newValue !== "0" && event.newValue !== "false";
         if (next === remindersEnabled) return;
@@ -1406,6 +1510,7 @@
       limiter = null;
       latestSnapshot = null;
       selectedVoice = null;
+      availableVoices = [];
       sessions.clear();
       waitingSessions.clear();
       seenKeys.clear();
@@ -1429,6 +1534,7 @@
       setMode,
       setEnabled,
       setRemindersEnabled,
+      setVoice,
       unlock,
       resume,
       cancel,
@@ -1453,6 +1559,8 @@
     create,
     STORAGE_KEY,
     REMINDERS_STORAGE_KEY,
+    VOICE_STORAGE_KEY,
+    syncVoiceSelect,
     MODES: Object.freeze(["off", "effects", "voice"]),
   });
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -85,6 +85,31 @@
   animation: agent-voice-cue 0.24s ease-out;
 }
 
+.agent-voice-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--agent-voice-text, inherit);
+  font-size: 11px;
+}
+
+.agent-voice-picker select {
+  min-width: 0;
+  max-width: 195px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--agent-voice-accent, #58d3ff) 40%, transparent);
+  border-radius: 4px;
+  background: var(--agent-voice-bg, rgba(12, 27, 48, 0.86));
+  color: inherit;
+  font: inherit;
+  color-scheme: dark light;
+}
+
+.agent-voice-picker select:disabled { opacity: 0.55; }
+.agent-voice-picker .agent-voice-online-note { max-width: 130px; line-height: 1.2; color: #dba85b; }
+.agent-voice-picker .agent-voice-online-note[hidden] { display: none; }
+
 @keyframes agent-voice-bar {
   from { height: 3px; }
   to { height: 12px; }

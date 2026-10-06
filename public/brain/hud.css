@@ -1142,6 +1142,14 @@
   grid-template-columns: 0.72fr 1fr 1.65fr;
   gap: 4px;
 }
+.hud-voice-choice-row .hud-voice-choice {
+  flex: 1 1 auto;
+  width: 0;
+  max-width: none;
+}
+.hud-voice-choice-row .agent-voice-online-note {
+  flex: 0 0 75px;
+}
 .hud-btn-audio-mode {
   position: relative;
   min-width: 0;

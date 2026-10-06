@@ -172,6 +172,8 @@ const hud = createHud(hudRoot, {
         ? activityAudio.setRemindersEnabled(!!value)
         : activityAudio.getState();
       hud.setVoiceState(state);
+    } else if (name === "audio-voice" && activityAudio) {
+      hud.setVoiceState(activityAudio.setVoice(value, { userGesture: true, preview: true }));
     }
     else if (name === "scenario" && fixture) {
       fixture.setScenario(value);

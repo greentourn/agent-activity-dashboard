@@ -92,9 +92,9 @@ one.
 | --- | --- |
 | **Node.js** | **18 or newer** (`fetch` is the newest API used, and only on the `--live-usage` path) |
 | **Install step** | none — zero dependencies, no `npm install`, no build |
-| **Network** | none required. three.js is vendored in `public/vendor/`, so it works fully offline |
+| **Network** | none required for the dashboard. three.js is vendored in `public/vendor/`; a voice explicitly selected as online needs the browser's voice service |
 | **Claude Code** | needed only to have *something to watch*. The dashboard itself never launches or talks to Claude Code |
-| **Browser** | any modern browser on Windows, macOS, or Linux. Activity effects use Web Audio; optional speech prefers an installed local `th-*` Web Speech voice; without one it uses the machine's own local voice (typically English) with an English phrase set, and falls back to effects only if no local voice exists at all. Only the 3D view needs WebGL — the classic and pixel views do not |
+| **Browser** | any modern browser on Windows, macOS, or Linux. Activity effects use Web Audio; optional speech prefers an installed local `th-*` Web Speech voice, then a local English voice with an English phrase set, and falls back to effects only if neither is available. Only the 3D view needs WebGL — the classic and pixel views do not |
 
 ---
 
@@ -139,14 +139,14 @@ Browsers may defer those timers while a tab is in the background or the computer
 one message instead of competing with each other. The first snapshot is a silent baseline and
 duplicate snapshots never replay audio.
 
-Only the selected mode and reminder preference are kept in browser storage—never activity or
-transcript data. Effects are generated locally and speech only ever uses a voice the browser/OS marks as
-local, so the audio feature sends no text or activity data over the network. This is not tied to
-Windows: it follows the same path on macOS and other supported desktop systems. A local Thai voice
-(`Microsoft Premwadee` on Windows, installed via the Thai language pack's text-to-speech feature) is
-preferred; if none is installed, the machine's default local voice speaks the same cues in English
-instead, and if there is no local voice at all, effects continue without an error. Cloud voices such
-as Edge's "Online (Natural)" set are never used.
+The mode, reminder preference, and voice choice are kept in browser storage—never activity or
+transcript data. The **เสียงพูด** menu lists Thai and English voices exposed by the browser, including
+Online / Natural voices when available. **อัตโนมัติ** (automatic) prefers a local Thai voice
+(`Microsoft Premwadee` on Windows, installed via the Thai language pack's text-to-speech feature),
+then a local English voice.
+If there is no local voice, effects continue without an error. Selecting an online voice explicitly
+allows the browser to send spoken text to its voice provider; the menu marks these voices as online.
+For an English voice, cues use English phrases. The same choice applies across all three views.
 
 > ⚠️ `--open` always opens **NEURAL CORE** (the 3D view); the server also prints all three URLs in
 > its startup banner. Every view links to the other two, so you can switch at any time: the classic

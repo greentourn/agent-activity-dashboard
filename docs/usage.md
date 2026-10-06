@@ -80,6 +80,7 @@ detail in the classic view") link at the bottom of its detail panel.
 | `กรอง ชื่อ/โปรเจกต์…` | filter box — matches session name and project path |
 | `☐ เตือนซ้ำเมื่อรอฉัน` | repeat the wait-for-user alert until the waiting state clears |
 | `เสียง AI — ปิด / เอฟเฟกต์ / พูด+เอฟเฟกต์` | choose off, event effects only, or Thai speech plus effects |
+| `เสียงพูด` | choose a Thai or English local/Online/Natural voice exposed by the browser; automatic prefers local |
 | `รีเซ็ตมุมมอง` | reset zoom/pan and unpin dragged nodes |
 | `NEURAL CORE` · `PIXEL OFFICE` | end of the header: switch to the 3D view or the pixel office (same stream, nothing to restart) |
 | click a node | open the side panel for that session or sub-agent |
@@ -89,7 +90,7 @@ detail in the classic view") link at the bottom of its detail panel.
 | `✕` | close the side panel |
 
 **Keyboard:** `Enter` or `Space` on a focused node opens its panel; `Escape` closes the panel.
-Only the audio mode and `เตือนซ้ำเมื่อรอฉัน` preference are remembered between reloads; no activity
+Only the audio mode, selected voice, and `เตือนซ้ำเมื่อรอฉัน` preference are remembered between reloads; no activity
 or transcript data is stored in your browser.
 
 The audio engine shared by all three views has three modes. `ปิด` (off) is the default and silences
@@ -108,12 +109,11 @@ setting remains remembered while audio is off, but produces no sound until an au
 selected.
 
 Repeated SSE snapshots never replay sounds, and the first snapshot is a silent baseline rather than
-old history. Effects are generated locally with Web Audio. Speech prefers an installed local `th-*`
-voice exposed through Web Speech on Windows, macOS, or another supported OS; if no Thai voice is
-installed, the machine's default local voice speaks an English version of the same cues (the button
-tooltip shows which voice is in use), and if no local voice exists at all the feature falls back
-safely to effects only. The audio path sends no text or activity
-data over the network.
+old history. Effects are generated locally with Web Audio. The **เสียงพูด** menu lists only Thai and
+English local and Online / Natural voices exposed by the browser. Automatic selection prefers an installed local
+Thai voice, then a local English voice; without one, effects still work. An online voice must be
+selected explicitly and may cause the browser to send spoken text to its voice provider. A
+English voice uses English phrases.
 
 ### The side panel tabs
 
@@ -176,6 +176,7 @@ A **sub-agent** gets three: `tool ทั้งหมด` (all tools), `ราย
 | `หมุนอัตโนมัติ: เปิด / ปิด` | auto-rotate — **off** by default |
 | `รีเซ็ตกล้อง` | reset the camera (rotation and target; see the note below) |
 | `เสียง AI — ปิด / เอฟเฟกต์ / พูด+เอฟเฟกต์` | choose the shared audio mode; the core pulses in time with cues/speech |
+| `เสียงพูด` | choose a Thai or English browser voice, including Online / Natural |
 | `เตือนซ้ำเมื่อรอฉัน: เปิด / ปิด` | enable or disable repeated wait-for-user reminders |
 | `ทดสอบฉาก` | scenario dropdown — **only appears in fixture mode** |
 | `← หน้าคลาสสิก` | back to the classic view |
@@ -374,6 +375,7 @@ Zoom goes in whole steps from ×1 to ×8, so every pixel of the art stays a cris
 | `ห้อง` list | click a room to go to it; click the header to fold / unfold the list |
 | `บันทึกเหตุการณ์` rows | click a row to select that event's character and go to it; click the header to fold / unfold |
 | `เสียง AI — ปิด / เอฟเฟกต์ / พูด+เอฟเฟกต์` | the shared audio mode |
+| `เสียงพูด` | choose a Thai or English browser voice, including Online / Natural |
 | `☐ เตือนซ้ำเมื่อรอฉัน` | repeat wait-for-user reminders |
 | `ทดสอบฉาก` | scenario dropdown — **only appears in fixture mode** |
 | `คลาสสิก` / `NEURAL CORE` | switch to the classic / 3D view |

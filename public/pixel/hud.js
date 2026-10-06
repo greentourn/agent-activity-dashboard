@@ -804,6 +804,19 @@ export function createHud(root, options = {}) {
     }
     group.append(icon, label, select, meter);
 
+    const picker = el("label", "agent-voice-picker", "เสียงพูด");
+    picker.htmlFor = "px-ai-voice-choice";
+    const voiceChoice = el("select");
+    voiceChoice.id = "px-ai-voice-choice";
+    voiceChoice.setAttribute("aria-label", "เลือกเสียงพูดในเครื่องหรือออนไลน์");
+    const automatic = el("option", null, "อัตโนมัติ");
+    automatic.value = "";
+    voiceChoice.append(automatic);
+    voiceChoice.addEventListener("change", () => command("audio-voice", voiceChoice.value));
+    const onlineNote = el("small", "agent-voice-online-note", "เสียงออนไลน์อาจส่งข้อความพูดไปยังผู้ให้บริการ");
+    onlineNote.hidden = true;
+    picker.append(voiceChoice, onlineNote);
+
     const reminder = el("label", "toggle agent-wait-reminder-toggle");
     reminder.title = "เตือนเป็นระยะจนกว่างานที่รอคำตอบหรือการยืนยันจากคุณจะทำต่อได้";
     const cb = el("input");
@@ -818,11 +831,12 @@ export function createHud(root, options = {}) {
     refs.voiceIcon = icon;
     refs.voiceLabel = label;
     refs.voiceSelect = select;
+    refs.voiceChoice = voiceChoice;
     refs.voiceBars = bars;
     refs.reminderLabel = reminder;
     refs.reminderInput = cb;
 
-    frag.append(group, reminder);
+    frag.append(group, picker, reminder);
     return frag;
   }
 
@@ -2103,6 +2117,11 @@ export function createHud(root, options = {}) {
 
     refs.voiceSelect.disabled = !supported;
     if (refs.voiceSelect.value !== mode) refs.voiceSelect.value = mode;
+    if (globalThis.AgentActivityAudio && typeof globalThis.AgentActivityAudio.syncVoiceSelect === "function") {
+      globalThis.AgentActivityAudio.syncVoiceSelect(refs.voiceChoice, voice);
+    } else {
+      refs.voiceChoice.disabled = true;
+    }
     refs.reminderInput.checked = remindersEnabled;
     /* ค่าจำของผู้ใช้ — เปลี่ยนได้แม้โหมดเสียงปิดอยู่ มันแค่ยังไม่ทำงานจนกว่าจะเปิดเสียง (เหมือนหน้าคลาสสิก) */
     refs.reminderInput.disabled = !supported;
@@ -2126,9 +2145,9 @@ export function createHud(root, options = {}) {
         : mode === "voice"
           ? voiceAvailable
             ? voice.voiceFallback
-              ? "ไม่พบเสียงภาษาไทย — ใช้เสียงของเครื่องพูดภาษาอังกฤษแทน" + (voiceName ? " · " + voiceName : "")
+              ? "เสียงนี้พูดประโยคภาษาอังกฤษ" + (voiceName ? " · " + voiceName : "")
               : "พูดภาษาไทยพร้อมเอฟเฟกต์" + (voiceName ? " · " + voiceName : "")
-            : "ไม่พบเสียงพูดในเครื่องเลย — จะเล่นเอฟเฟกต์แทน"
+            : "ไม่พบเสียงพูดในเครื่อง — เลือกเสียงออนไลน์ได้ หรือใช้เอฟเฟกต์ต่อ"
           : mode === "effects"
             ? "เอฟเฟกต์เสียงเท่านั้น ไม่มีเสียงพูด"
             : "ปิดเสียงเหตุการณ์ของ AI";

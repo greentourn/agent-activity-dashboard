@@ -312,6 +312,8 @@ function handleCommand(name, value) {
         ? activityAudio.setRemindersEnabled(!!value)
         : activityAudio.getState();
     hud.setVoiceState(state);
+  } else if (name === "audio-voice" && activityAudio) {
+    hud.setVoiceState(activityAudio.setVoice(value, { userGesture: true, preview: true }));
   } else if (name === "scenario" && fixture) {
     if (!SCENARIOS.includes(value)) return;
     fixture.setScenario(value);

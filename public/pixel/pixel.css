@@ -583,6 +583,15 @@ button.px-panel-head:hover {
   padding: 4px 10px 4px 6px;
 }
 
+.px-hud .agent-voice-picker select {
+  border-radius: 0;
+  border-color: var(--sw-slate);
+  background: var(--sw-black);
+  color: var(--sw-white);
+  font-weight: 700;
+  color-scheme: dark;
+}
+
 .px-links {
   flex: 0 0 auto;
   display: flex;

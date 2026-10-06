@@ -603,6 +603,20 @@ export function createHud(root, options = {}) {
     voiceBtn.append(voiceMeter);
     audioRow.append(modeGroup);
 
+    const voiceRow = el("div", "hud-controls-group hud-voice-choice-row agent-voice-picker");
+    const voiceLabel = el("label", "hud-controls-caption", "เสียงพูด");
+    voiceLabel.htmlFor = "hud-voice-choice";
+    const voiceChoice = el("select", "hud-voice-choice");
+    voiceChoice.id = "hud-voice-choice";
+    voiceChoice.setAttribute("aria-label", "เลือกเสียงพูดในเครื่องหรือออนไลน์");
+    const automatic = el("option", null, "อัตโนมัติ");
+    automatic.value = "";
+    voiceChoice.append(automatic);
+    voiceChoice.addEventListener("change", () => safeCall(onCommand, "audio-voice", voiceChoice.value));
+    const onlineNote = el("small", "agent-voice-online-note", "เสียงออนไลน์อาจส่งข้อความพูดไปยังผู้ให้บริการ");
+    onlineNote.hidden = true;
+    voiceRow.append(voiceLabel, voiceChoice, onlineNote);
+
     const reminderBtn = el("button", "hud-btn hud-btn-reminders", "");
     reminderBtn.type = "button";
     reminderBtn.setAttribute("aria-pressed", "true");
@@ -616,9 +630,10 @@ export function createHud(root, options = {}) {
     refs.voiceBtn = voiceBtn;
     refs.voiceMeter = voiceMeter;
     refs.voiceBars = voiceBars;
+    refs.voiceChoice = voiceChoice;
     refs.reminderBtn = reminderBtn;
 
-    controls.append(qualityGroup, autorotateBtn, resetBtn, audioRow, reminderBtn);
+    controls.append(qualityGroup, autorotateBtn, resetBtn, audioRow, voiceRow, reminderBtn);
 
     if (fixtureMode) {
       const scenarioWrap = el("div", "hud-controls-group");
@@ -1219,6 +1234,11 @@ export function createHud(root, options = {}) {
       btn.classList.toggle("hud-btn--active", selected);
       btn.setAttribute("aria-pressed", selected ? "true" : "false");
     }
+    if (globalThis.AgentActivityAudio && typeof globalThis.AgentActivityAudio.syncVoiceSelect === "function") {
+      globalThis.AgentActivityAudio.syncVoiceSelect(refs.voiceChoice, voiceState);
+    } else {
+      refs.voiceChoice.disabled = true;
+    }
 
     const voiceActive = voiceState.voiceEnabled && voiceState.voiceAvailable && voiceState.supported;
     refs.voiceBtn.classList.toggle("is-speaking", voiceActive && voiceState.speaking);
@@ -1231,11 +1251,11 @@ export function createHud(root, options = {}) {
     if (!voiceState.supported) {
       refs.voiceBtn.title = "เบราว์เซอร์นี้ไม่รองรับเสียงพูดหรือเสียงเอฟเฟกต์";
     } else if (voiceState.voiceEnabled && !voiceState.voiceAvailable) {
-      refs.voiceBtn.title = "ไม่พบเสียงพูดในเครื่องเลย — โหมดนี้จะเล่นเอฟเฟกต์แทน";
+      refs.voiceBtn.title = "ไม่พบเสียงพูดในเครื่อง — เลือกเสียงออนไลน์ได้ หรือใช้เอฟเฟกต์ต่อ";
     } else if (voiceState.voiceEnabled && !voiceState.unlocked) {
       refs.voiceBtn.title = "แตะอีกครั้งเพื่อเริ่มเสียงพูดและฟังตัวอย่าง";
     } else if (voiceState.voiceEnabled && voiceState.voiceFallback) {
-      refs.voiceBtn.title = `ไม่พบเสียงภาษาไทย — ใช้เสียงของเครื่องพูดภาษาอังกฤษแทน${voiceState.voiceName ? ` · ${voiceState.voiceName}` : ""}`;
+      refs.voiceBtn.title = `เสียงนี้พูดประโยคภาษาอังกฤษ${voiceState.voiceName ? ` · ${voiceState.voiceName}` : ""}`;
     } else {
       refs.voiceBtn.title = "พูดภาษาไทยเฉพาะเหตุการณ์สำคัญ พร้อมเสียงสัญญาณ";
     }
