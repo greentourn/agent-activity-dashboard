@@ -3,7 +3,8 @@
 #  Agent Activity Dashboard - double-click launcher (macOS)
 #
 #  ดับเบิลคลิกไฟล์นี้ใน Finder = เปิด Terminal รันเซิร์ฟเวอร์ + เปิด NEURAL CORE (หน้า 3D) ให้เลย
-#  ปิดหน้าต่าง Terminal (หรือกด Ctrl+C) = หยุดเซิร์ฟเวอร์
+#  ปิดหน้าเว็บครบทุกหน้า = เซิร์ฟเวอร์หยุดเองภายใน 30 วิ
+#  อยากหยุดทันที = ปิดหน้าต่าง Terminal (หรือกด Ctrl+C)
 #  ถ้าเซิร์ฟเวอร์รันอยู่แล้ว ดับเบิลคลิกซ้ำจะแค่เปิดหน้าเว็บให้ ไม่รันซ้อน
 #
 #  ครั้งแรกถ้า macOS ไม่ยอมเปิด (ไฟล์มาจาก ZIP ที่โหลดจากเว็บ) ดูวิธีแก้ใน README หัวข้อ
@@ -17,8 +18,10 @@ cd "$(dirname "$0")" || exit 1
 #  DASH_PORT : พอร์ตของเซิร์ฟเวอร์
 #  DASH_ARGS : option เพิ่มเติมของ server.mjs เช่น --live-usage, --stale-minutes 60
 #              (ตั้งเป็นค่าว่าง DASH_ARGS="" ถ้าไม่อยากให้ดึง % โควตาสดจาก Anthropic)
+#  DASH_IDLE_EXIT : ปิดหน้าเว็บครบทุกหน้าแล้วกี่วินาทีให้เซิร์ฟเวอร์หยุดเอง (0 = ไม่หยุดเอง)
 DASH_PORT="${DASH_PORT:-7676}"
 DASH_ARGS="${DASH_ARGS---live-usage}"
+DASH_IDLE_EXIT="${DASH_IDLE_EXIT:-30}"
 
 DASH_URL="http://127.0.0.1:${DASH_PORT}/brain.html"
 
@@ -57,7 +60,7 @@ fi
 # ---- รันเซิร์ฟเวอร์ (--open เปิดเบราว์เซอร์ให้เองเมื่อพร้อม) -------------------------
 # DASH_ARGS is deliberately unquoted: it is a list of options, split on spaces.
 # shellcheck disable=SC2086
-node server.mjs --open --port "${DASH_PORT}" ${DASH_ARGS}
+node server.mjs --open --port "${DASH_PORT}" --idle-exit "${DASH_IDLE_EXIT}" ${DASH_ARGS}
 status=$?
 
 # ถึงตรงนี้ได้แปลว่าเซิร์ฟเวอร์หยุดแล้ว ถ้าหยุดเพราะ error (เช่นพอร์ตถูกโปรแกรมอื่นใช้อยู่)

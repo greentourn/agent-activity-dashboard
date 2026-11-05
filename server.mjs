@@ -145,6 +145,12 @@ function parseArgs(argv) {
      * โดยยิงน้อยลงครึ่งหนึ่ง (ถ้ายังโดนปฏิเสธอีก บันไดถอยข้างล่างจะขยายให้เอง)
      */
     liveUsageSeconds: 120,
+    /*
+     * 0 = off (the default: a server you started by hand keeps running until you stop it).
+     * The double-click launchers turn it on, so closing the last browser page also stops the
+     * server instead of leaving it behind in a console window nobody is looking at.
+     */
+    idleExitSeconds: 0,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -157,6 +163,9 @@ function parseArgs(argv) {
       // otherwise hammer it for a number that moves in minutes.
       out.liveUsageSeconds = Math.max(15, Number(argv[++i]) || out.liveUsageSeconds);
       out.liveUsage = true;
+    } else if (arg === "--idle-exit") {
+      const seconds = Number(argv[++i]);
+      out.idleExitSeconds = seconds > 0 ? seconds : 0;
     } else if (arg === "--help" || arg === "-h") out.help = true;
   }
   return out;
@@ -174,6 +183,9 @@ if (ARGS.help) {
       "  --port, -p <n>         port to listen on (default 7676)",
       "  --open, -o             open NEURAL CORE (the 3D view) in your browser",
       "  --stale-minutes <n>    keep a finished session on screen this long (default 30)",
+      "  --idle-exit <n>        stop the server once no dashboard page has been open for n",
+      "                         seconds (off by default; the double-click launchers use 30).",
+      "                         Only counts after the first page has connected.",
       "",
       "  --live-usage           fetch the REAL session/weekly % from Anthropic instead of the",
       "                         stale ~/.claude.json cache. Reads the OAuth token from",
@@ -2552,6 +2564,38 @@ function resolveTailPath(sessionId, agentId) {
 const clients = new Set();
 let lastPayload = "";
 
+/*
+ * `--idle-exit`: every dashboard page (3D, Pixel, Classic) holds exactly one /api/stream connection
+ * while it is open, so "no SSE client" means "no page open". When the last one goes away, wait the
+ * grace period and stop. The grace period is what keeps a reload, or hopping between the three
+ * views, from killing the server: the page is back long before it runs out, and its reconnect
+ * cancels the countdown.
+ *
+ * Not armed until a page has connected at least once. Before that the browser `--open` launched
+ * may still be starting cold, and quitting then would leave it staring at "can't connect".
+ */
+let idleExitTimer = null;
+let pageEverConnected = false;
+
+function updateIdleExit() {
+  if (!ARGS.idleExitSeconds) return;
+  if (clients.size > 0) {
+    pageEverConnected = true;
+    clearTimeout(idleExitTimer);
+    idleExitTimer = null;
+    return;
+  }
+  if (!pageEverConnected || idleExitTimer) return;
+  idleExitTimer = setTimeout(() => {
+    idleExitTimer = null;
+    if (clients.size > 0) return;
+    process.stdout.write(
+      `\n  ไม่มีหน้า dashboard เปิดอยู่มา ${ARGS.idleExitSeconds} วิ — หยุดเซิร์ฟเวอร์ (--idle-exit)\n\n`,
+    );
+    process.exit(0);
+  }, ARGS.idleExitSeconds * 1000);
+}
+
 function broadcast() {
   let snapshot;
   try {
@@ -2670,7 +2714,11 @@ const server = createServer((req, res) => {
     });
     res.write(`data: ${JSON.stringify(buildSnapshot())}\n\n`);
     clients.add(res);
-    req.on("close", () => clients.delete(res));
+    updateIdleExit();
+    req.on("close", () => {
+      clients.delete(res);
+      updateIdleExit();
+    });
     return;
   }
 
@@ -2723,6 +2771,11 @@ server.listen(ARGS.port, "127.0.0.1", () => {
       ? `  โควตา: สด — GET /api/oauth/usage ทุก ${ARGS.liveUsageSeconds}s (อ่าน OAuth token จาก ${CREDENTIALS_JSON})\n`
       : `  โควตา: หน้าต่าง 5 ชม. สดจาก transcript · % อย่างเป็นทางการมาจาก cache (ใส่ --live-usage เพื่อดึงสด)\n`,
   );
+  if (ARGS.idleExitSeconds) {
+    process.stdout.write(
+      `  ปิดเอง: เมื่อปิดหน้า dashboard ครบทุกหน้าแล้ว ${ARGS.idleExitSeconds} วิ (--idle-exit)\n`,
+    );
+  }
   process.stdout.write(`\n  Ctrl+C to stop\n\n`);
   if (ARGS.open) {
     const opener =

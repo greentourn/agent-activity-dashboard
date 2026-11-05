@@ -119,11 +119,17 @@ node server.mjs --open
 | Windows | `start-dashboard.bat` | หน้าต่าง console ขึ้นมา แล้วเบราว์เซอร์เปิด NEURAL CORE ให้ |
 | macOS | `start-dashboard.command` | หน้าต่าง Terminal ขึ้นมา แล้วเบราว์เซอร์เปิด NEURAL CORE ให้ |
 
-- **ปิดหน้าต่างนั้น = หยุด dashboard** ระหว่างใช้งานให้เปิดค้างไว้ (ย่อเก็บได้)
+- **ปิดหน้า dashboard ครบทุกหน้า = หยุดเองภายใน 30 วินาที** และหน้าต่างนั้นจะปิดตาม การกด reload หรือสลับไปมา
+  ระหว่างหน้า 3D / Pixel / Classic ไม่นับว่าปิด ถ้าอยากหยุดทันทีให้ปิดหน้าต่างนั้น (หรือกด `Ctrl+C` ในหน้าต่างนั้น)
+- หน้าต่างนั้นคือตัวเซิร์ฟเวอร์ ระหว่างใช้งานให้เปิดค้างไว้ (ย่อเก็บได้)
 - **ดับเบิลคลิกซ้ำตอนที่รันอยู่แล้ว จะแค่เปิดหน้าเว็บให้** ไม่รันเซิร์ฟเวอร์ซ้อน และไม่ขึ้น error ว่าพอร์ตถูกใช้
 - ตัวเปิดจะรัน `node server.mjs --open --live-usage` ซึ่งเป็นคำสั่งเดียวกับด้านบนสุดของหน้านี้
-  ถ้าอยากเปลี่ยนพอร์ตหรือ option ให้เปิดไฟล์ด้วย text editor แล้วแก้ `DASH_PORT` / `DASH_ARGS` ที่อยู่ช่วงต้นไฟล์
-  ถ้าไม่อยากเปิด `--live-usage` ให้ตั้ง `DASH_ARGS` เป็นค่าว่าง
+  และเติม `--idle-exit 30` ให้ด้วย ตัวนี้คือสิ่งที่ทำให้เซิร์ฟเวอร์หยุดเองเมื่อปิดหน้าเว็บครบ
+  ถ้าอยากเปลี่ยน ให้เปิดไฟล์ด้วย text editor แล้วแก้ค่าที่อยู่ช่วงต้นไฟล์: `DASH_PORT` (พอร์ต), `DASH_ARGS`
+  (option เพิ่มเติม ตั้งเป็นค่าว่างถ้าไม่อยากเปิด `--live-usage`) และ `DASH_IDLE_EXIT` (กี่วินาทีถึงหยุดเอง ตั้ง `0`
+  ถ้าอยากให้รันไปจนกว่าจะปิดหน้าต่างเอง)
+- **macOS:** หลังเซิร์ฟเวอร์หยุดเอง หน้าต่าง Terminal อาจยังค้างอยู่พร้อมข้อความ `[Process completed]`
+  แล้วแต่การตั้งค่า Terminal ตอนนั้นเซิร์ฟเวอร์หยุดแล้ว ปิดหน้าต่างได้เลย
 - **macOS ครั้งแรก ถ้าโหลดมาเป็น ZIP:** macOS อาจไม่ยอมเปิดเพราะมาจาก "นักพัฒนาที่ไม่ได้ระบุตัวตน" ให้ไปที่
   **System Settings → Privacy & Security** แล้วกด **Open Anyway** หรือรัน
   `xattr -d com.apple.quarantine start-dashboard.command` ครั้งเดียว ถ้าขึ้นว่าไม่มีสิทธิ์ ให้รัน
@@ -203,6 +209,9 @@ node server.mjs [options]
   --port, -p <n>         port to listen on (default 7676)
   --open, -o             open NEURAL CORE (the 3D view) in your browser
   --stale-minutes <n>    keep a finished session on screen this long (default 30)
+  --idle-exit <n>        stop the server once no dashboard page has been open for n
+                         seconds (off by default; the double-click launchers use 30).
+                         Only counts after the first page has connected.
 
   --live-usage           fetch the REAL session/weekly % from Anthropic instead of the
                          stale ~/.claude.json cache. Reads the OAuth token from

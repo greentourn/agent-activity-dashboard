@@ -5,7 +5,8 @@ rem ===========================================================================
 rem  Agent Activity Dashboard - double-click launcher (Windows)
 rem
 rem  ดับเบิลคลิกไฟล์นี้ = รันเซิร์ฟเวอร์ + เปิด NEURAL CORE (หน้า 3D) ในเบราว์เซอร์ให้เลย
-rem  ปิดหน้าต่างดำนี้ (หรือกด Ctrl+C) = หยุดเซิร์ฟเวอร์
+rem  ปิดหน้าเว็บครบทุกหน้า = เซิร์ฟเวอร์หยุดเองภายใน 30 วิ แล้วหน้าต่างดำนี้ปิดตาม
+rem  อยากหยุดทันที = ปิดหน้าต่างดำนี้ (หรือกด Ctrl+C)
 rem  ถ้าเซิร์ฟเวอร์รันอยู่แล้ว ดับเบิลคลิกซ้ำจะแค่เปิดหน้าเว็บให้ ไม่รันซ้อน
 rem ===========================================================================
 setlocal
@@ -16,8 +17,10 @@ rem ---- ตั้งค่า (แก้ได้ หรือกำหนด�
 rem  DASH_PORT : พอร์ตของเซิร์ฟเวอร์
 rem  DASH_ARGS : option เพิ่มเติมของ server.mjs เช่น --live-usage, --stale-minutes 60
 rem              (ใส่ DASH_ARGS เป็นค่าว่างถ้าไม่อยากให้ดึง % โควตาสดจาก Anthropic)
+rem  DASH_IDLE_EXIT : ปิดหน้าเว็บครบทุกหน้าแล้วกี่วินาทีให้เซิร์ฟเวอร์หยุดเอง (0 = ไม่หยุดเอง)
 if not defined DASH_PORT set "DASH_PORT=7676"
 if not defined DASH_ARGS set "DASH_ARGS=--live-usage"
+if not defined DASH_IDLE_EXIT set "DASH_IDLE_EXIT=30"
 
 set "DASH_URL=http://127.0.0.1:%DASH_PORT%/brain.html"
 
@@ -44,7 +47,7 @@ if not errorlevel 1 (
 )
 
 rem ---- รันเซิร์ฟเวอร์ (--open เปิดเบราว์เซอร์ให้เองเมื่อพร้อม) -----------------------
-node server.mjs --open --port %DASH_PORT% %DASH_ARGS%
+node server.mjs --open --port %DASH_PORT% --idle-exit %DASH_IDLE_EXIT% %DASH_ARGS%
 
 rem  ถึงตรงนี้ได้แปลว่าเซิร์ฟเวอร์หยุดแล้ว ถ้าหยุดเพราะ error (เช่นพอร์ตถูกโปรแกรมอื่นใช้อยู่)
 rem  ให้ค้างหน้าต่างไว้ให้อ่านข้อความก่อน — Ctrl+C ได้ exit code ติดลบ จึงไม่เข้าเงื่อนไขนี้

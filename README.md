@@ -121,12 +121,20 @@ Prefer not to type a command? Double-click the launcher for your OS in the proje
 | Windows | `start-dashboard.bat` | a console window, then NEURAL CORE opens in your browser |
 | macOS | `start-dashboard.command` | a Terminal window, then NEURAL CORE opens in your browser |
 
-- **Closing that window stops the dashboard.** Leave it open (minimised is fine) while you use it.
+- **Close every dashboard page and it stops on its own** after 30 seconds, and the window closes with
+  it. Reloading, or hopping between the 3D, Pixel and Classic views, does not count as closing.
+  To stop it right away, close that window (or press `Ctrl+C` in it).
+- That window is the server, so leave it open (minimised is fine) while you use the dashboard.
 - **Double-clicking again while it is running just opens the page.** It does not start a second
   server or fail with "port in use".
 - The launchers run `node server.mjs --open --live-usage`, the same command as the top of this page.
-  To change the port or the options, open the file in a text editor and edit `DASH_PORT` /
-  `DASH_ARGS` near the top. Set `DASH_ARGS` to empty to leave `--live-usage` off.
+  They also add `--idle-exit 30`, which is what stops the server once every page is closed.
+  To change these, open the file in a text editor and edit the settings near the top:
+  `DASH_PORT` (port), `DASH_ARGS` (options; set it to empty to leave `--live-usage` off) and
+  `DASH_IDLE_EXIT` (seconds before stopping; `0` keeps the server running until you close the window).
+- **macOS:** depending on your Terminal settings, the window may stay open showing
+  `[Process completed]` after the server stops on its own. The server has stopped; you can close the
+  window.
 - **macOS, first run from a downloaded ZIP:** macOS may refuse to open it because it is from "an
   unidentified developer". Go to **System Settings → Privacy & Security** and click **Open Anyway**,
   or run `xattr -d com.apple.quarantine start-dashboard.command` once. If it says you lack
@@ -213,6 +221,9 @@ node server.mjs [options]
   --port, -p <n>         port to listen on (default 7676)
   --open, -o             open NEURAL CORE (the 3D view) in your browser
   --stale-minutes <n>    keep a finished session on screen this long (default 30)
+  --idle-exit <n>        stop the server once no dashboard page has been open for n
+                         seconds (off by default; the double-click launchers use 30).
+                         Only counts after the first page has connected.
 
   --live-usage           fetch the REAL session/weekly % from Anthropic instead of the
                          stale ~/.claude.json cache. Reads the OAuth token from
