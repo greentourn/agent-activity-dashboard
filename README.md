@@ -112,6 +112,26 @@ picking a port, and keeping it running in the background — are in
 
 Stop it with `Ctrl+C`.
 
+### Double-click to open
+
+Prefer not to type a command? Double-click the launcher for your OS in the project folder:
+
+| OS | File | What you see |
+|---|---|---|
+| Windows | `start-dashboard.bat` | a console window, then NEURAL CORE opens in your browser |
+| macOS | `start-dashboard.command` | a Terminal window, then NEURAL CORE opens in your browser |
+
+- **Closing that window stops the dashboard.** Leave it open (minimised is fine) while you use it.
+- **Double-clicking again while it is running just opens the page.** It does not start a second
+  server or fail with "port in use".
+- The launchers run `node server.mjs --open --live-usage`, the same command as the top of this page.
+  To change the port or the options, open the file in a text editor and edit `DASH_PORT` /
+  `DASH_ARGS` near the top. Set `DASH_ARGS` to empty to leave `--live-usage` off.
+- **macOS, first run from a downloaded ZIP:** macOS may refuse to open it because it is from "an
+  unidentified developer". Go to **System Settings → Privacy & Security** and click **Open Anyway**,
+  or run `xattr -d com.apple.quarantine start-dashboard.command` once. If it says you lack
+  permission, run `chmod +x start-dashboard.command`. A `git clone` needs neither step.
+
 ---
 
 ## The three views

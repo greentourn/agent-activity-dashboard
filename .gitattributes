@@ -3,6 +3,11 @@
 # core.autocrlf=true commits CRLF and every Linux/macOS clone shows a whole-file diff.
 * text=auto eol=lf
 
+# Windows batch files are the exception: cmd.exe misparses LF-only scripts (labels, long lines),
+# so the double-click launcher must be checked out with CRLF on every platform.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 # Never touch binaries.
 *.png binary
 *.jpg binary
